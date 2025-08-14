@@ -28,6 +28,7 @@ const SteeringWheelIcon = () => (
 const Seat = ({ seatNumber, isSelected, onSelect, isOccupied }: { seatNumber: string; isSelected: boolean; onSelect: (seatNumber: string) => void; isOccupied?: boolean }) => {
   return (
     <Button
+      type="button"
       variant={isSelected ? "default" : isOccupied ? "destructive" : "outline"}
       size="icon"
       className={cn(
