@@ -57,7 +57,12 @@ export default function BusesTable() {
     try {
       const busesCollection = collection(db, "buses");
       const busesSnapshot = await getDocs(busesCollection);
-      const busesList = busesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bus));
+      const busesList = busesSnapshot.docs.map(doc => {
+        const data = doc.data();
+        // Ensure status is a boolean, defaulting to false if it's missing or not a boolean
+        const status = typeof data.status === 'boolean' ? data.status : false;
+        return { id: doc.id, ...data, status } as Bus;
+      });
       setBuses(busesList);
     } catch (error) {
       console.error("Error fetching buses: ", error);
@@ -69,7 +74,7 @@ export default function BusesTable() {
 
   useEffect(() => {
     fetchBuses();
-  }, [toast]);
+  }, []);
 
   const handleEditClick = (bus: Bus) => {
     setEditingBus(bus);
