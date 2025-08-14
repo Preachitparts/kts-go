@@ -102,7 +102,7 @@ export default function AdminLayout({
         <SidebarContent>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild>
+              <SidebarMenuButton asChild isActive={pathname === '/admin'}>
                 <Link href="/admin">
                   <LayoutDashboard />
                   Dashboard
@@ -110,7 +110,7 @@ export default function AdminLayout({
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild>
+              <SidebarMenuButton asChild isActive={pathname === '/admin/bookings'}>
                 <Link href="/admin/bookings">
                   <Ticket />
                   Bookings
@@ -118,7 +118,7 @@ export default function AdminLayout({
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild>
+              <SidebarMenuButton asChild isActive={pathname === '/admin/passengers'}>
                 <Link href="/admin/passengers">
                   <Users />
                   Passengers
@@ -126,7 +126,7 @@ export default function AdminLayout({
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild>
+              <SidebarMenuButton asChild isActive={pathname === '/admin/buses'}>
                 <Link href="/admin/buses">
                   <Bus />
                   Buses
@@ -134,7 +134,7 @@ export default function AdminLayout({
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild>
+              <SidebarMenuButton asChild isActive={pathname === '/admin/routes'}>
                 <Link href="/admin/routes">
                   <Map />
                   Routes
@@ -142,7 +142,7 @@ export default function AdminLayout({
               </SidebarMenuButton>
             </SidebarMenuItem>
              <SidebarMenuItem>
-              <SidebarMenuButton asChild>
+              <SidebarMenuButton asChild isActive={pathname === '/admin/anomaly-spotter'}>
                 <Link href="/admin/anomaly-spotter">
                   <BrainCircuit />
                   Anomaly Spotter
@@ -150,7 +150,7 @@ export default function AdminLayout({
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild>
+              <SidebarMenuButton asChild isActive={pathname === '/admin/users'}>
                 <Link href="/admin/users">
                   <UserCog />
                   Manage Admins
@@ -158,7 +158,7 @@ export default function AdminLayout({
               </SidebarMenuButton>
             </SidebarMenuItem>
              <SidebarMenuItem>
-              <SidebarMenuButton asChild>
+              <SidebarMenuButton asChild isActive={pathname === '/admin/settings'}>
                 <Link href="/admin/settings">
                   <Settings />
                   Settings
