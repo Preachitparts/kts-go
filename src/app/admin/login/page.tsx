@@ -62,23 +62,36 @@ export default function AdminLoginPage() {
         await auth.signOut();
         toast({
           variant: "destructive",
-          title: "Login Failed",
-          description: "You are not authorized to access this panel.",
+          title: "Authorization Failed",
+          description: "You are not authorized to access this admin panel.",
         });
       }
     } catch (error: any) {
-      let description = "Invalid credentials. Please try again.";
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-          description = "Invalid email or password.";
-      } else if (error.code === 'auth/invalid-credential') {
-          description = "Invalid credentials provided.";
+      let description = "An unexpected error occurred. Please try again.";
+      // Give more specific feedback based on the Firebase error code
+      switch (error.code) {
+        case 'auth/user-not-found':
+          description = "No account found with this email address.";
+          break;
+        case 'auth/wrong-password':
+          description = "Incorrect password. Please try again.";
+          break;
+        case 'auth/invalid-credential':
+           description = "The email or password you entered is incorrect.";
+           break;
+        case 'auth/too-many-requests':
+          description = "Too many failed login attempts. Please reset your password or try again later.";
+          break;
+        default:
+          description = error.message;
+          break;
       }
       toast({
         variant: "destructive",
         title: "Login Failed",
         description: description,
       });
-      console.error(error);
+      console.error("Firebase Auth Error:", error);
     } finally {
       setIsLoading(false);
     }
