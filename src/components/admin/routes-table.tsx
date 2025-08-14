@@ -13,9 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PlusCircle, Loader2, Trash2, Pencil, ArrowRightLeft } from "lucide-react";
+import { PlusCircle, Loader2, Trash2, Pencil, ArrowRightLeft, CheckCircle } from "lucide-react";
 import { useEffect, useState } from "react";
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -122,6 +122,24 @@ export default function RoutesTable() {
     }
   };
 
+  const handleActivateAll = async () => {
+    const batch = writeBatch(db);
+    routes.forEach(route => {
+        if (!route.status) {
+            const routeRef = doc(db, "routes", route.id);
+            batch.update(routeRef, { status: true });
+        }
+    });
+    try {
+        await batch.commit();
+        toast({ title: "Success", description: "All routes have been activated." });
+        fetchRoutes();
+    } catch (error) {
+        console.error("Error activating all routes: ", error);
+        toast({ variant: "destructive", title: "Error", description: "Failed to activate all routes." });
+    }
+  };
+
 
   const onSubmit = async (values: z.infer<typeof routeSchema>) => {
     setIsSubmitting(true);
@@ -160,7 +178,10 @@ export default function RoutesTable() {
 
   return (
     <>
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-end gap-2 mb-4">
+        <Button variant="outline" onClick={handleActivateAll}>
+            <CheckCircle className="mr-2 h-4 w-4" /> Activate All
+        </Button>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={openNewRouteDialog}>
