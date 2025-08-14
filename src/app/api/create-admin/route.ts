@@ -1,6 +1,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import * as admin from "firebase-admin";
+import { config } from 'dotenv';
+
+// Load environment variables from .env file
+config();
 
 // Function to initialize Firebase Admin SDK
 function initializeFirebaseAdmin() {
