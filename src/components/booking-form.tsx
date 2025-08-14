@@ -42,7 +42,8 @@ const bookingSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
   phone: z.string().regex(/^(\+233|0)[2-9]\d{8}$/, "Invalid Ghanaian phone number."),
   date: z.date({ required_error: "Departure date is required." }),
-  journeyId: z.string().min(1, "Please select an available journey."),
+  routeId: z.string().min(1, "Please select a route."),
+  busId: z.string().min(1, "Please select a bus."),
   seats: z.array(z.string()).min(1, "Please select at least one seat."),
   emergencyContact: z.string().regex(/^(\+233|0)[2-9]\d{8}$/, "Invalid Ghanaian phone number."),
 });
@@ -50,23 +51,14 @@ const bookingSchema = z.object({
 type Route = { id: string; pickup: string; destination: string; price: number; status: boolean; };
 type Bus = { id: string; numberPlate: string; capacity: number; status: boolean; };
 
-type Journey = {
-    id: string; // combination of routeId and busId
-    routeName: string;
-    busName: string;
-    price: number;
-    capacity: number;
-    routeId: string;
-    busId: string;
-};
-
 export function BookingForm() {
   const router = useRouter();
   const { toast } = useToast();
   const [totalAmount, setTotalAmount] = React.useState(0);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [journeys, setJourneys] = React.useState<Journey[]>([]);
-  const [loadingJourneys, setLoadingJourneys] = React.useState(true);
+  const [routes, setRoutes] = React.useState<Route[]>([]);
+  const [buses, setBuses] = React.useState<Bus[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
   const form = useForm<z.infer<typeof bookingSchema>>({
     resolver: zodResolver(bookingSchema),
@@ -75,17 +67,18 @@ export function BookingForm() {
       phone: "",
       seats: [],
       emergencyContact: "",
-      journeyId: "",
+      routeId: "",
+      busId: "",
     },
   });
   
-  const selectedDate = form.watch("date");
-  const selectedJourneyId = form.watch("journeyId");
+  const selectedRouteId = form.watch("routeId");
+  const selectedBusId = form.watch("busId");
   const selectedSeats = form.watch("seats");
 
   React.useEffect(() => {
     const fetchPrerequisites = async () => {
-      setLoadingJourneys(true);
+      setLoading(true);
       try {
         const routesQuery = query(collection(db, "routes"), where("status", "==", true));
         const busesQuery = query(collection(db, "buses"), where("status", "==", true));
@@ -98,45 +91,35 @@ export function BookingForm() {
         const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
         const busesList = busesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bus));
         
-        const availableJourneys: Journey[] = [];
-        routesList.forEach(route => {
-            busesList.forEach(bus => {
-                availableJourneys.push({
-                    id: `${route.id}_${bus.id}`,
-                    routeName: `${route.pickup} - ${route.destination}`,
-                    busName: bus.numberPlate,
-                    price: route.price,
-                    capacity: bus.capacity,
-                    routeId: route.id,
-                    busId: bus.id,
-                });
-            });
-        });
-
-        setJourneys(availableJourneys);
+        setRoutes(routesList);
+        setBuses(busesList);
 
       } catch (error) {
         console.error("Error fetching prerequisites: ", error);
         toast({ variant: "destructive", title: "Error", description: "Could not fetch available journeys." });
       } finally {
-        setLoadingJourneys(false);
+        setLoading(false);
       }
     };
     fetchPrerequisites();
   }, [toast]);
 
-  const selectedJourney = React.useMemo(() => {
-    return journeys.find(s => s.id === selectedJourneyId);
-  }, [journeys, selectedJourneyId]);
+  const selectedRoute = React.useMemo(() => {
+    return routes.find(r => r.id === selectedRouteId);
+  }, [routes, selectedRouteId]);
+  
+  const selectedBus = React.useMemo(() => {
+    return buses.find(b => b.id === selectedBusId);
+  }, [buses, selectedBusId]);
 
   React.useEffect(() => {
-    const price = selectedJourney ? selectedJourney.price : 0;
+    const price = selectedRoute ? selectedRoute.price : 0;
     setTotalAmount(selectedSeats.length * price);
-  }, [selectedSeats, selectedJourney]);
+  }, [selectedSeats, selectedRoute]);
 
   async function onSubmit(values: z.infer<typeof bookingSchema>) {
-    if (!selectedJourney) {
-        toast({ variant: "destructive", title: "Error", description: "Selected journey is not valid." });
+    if (!selectedRoute || !selectedBus) {
+        toast({ variant: "destructive", title: "Error", description: "Selected route or bus is not valid." });
         return;
     }
     setIsSubmitting(true);
@@ -149,14 +132,13 @@ export function BookingForm() {
         emergencyContact: values.emergencyContact,
         date: values.date.toISOString(),
         seats: values.seats.join(','),
-        pickup: selectedJourney.routeName.split(' - ')[0],
-        destination: selectedJourney.routeName.split(' - ')[1],
-        busType: `${selectedJourney.busName} - ${selectedJourney.capacity} Seater`,
+        pickup: selectedRoute.pickup,
+        destination: selectedRoute.destination,
+        busType: `${selectedBus.numberPlate} - ${selectedBus.capacity} Seater`,
         totalAmount,
         ticketNumber,
-        journeyId: values.journeyId,
-        routeId: selectedJourney.routeId,
-        busId: selectedJourney.busId,
+        routeId: values.routeId,
+        busId: values.busId,
       };
 
       // Save passenger info
@@ -259,32 +241,32 @@ export function BookingForm() {
                 </FormItem>
             )}
             />
-            <FormField
+             <FormField
                 control={form.control}
-                name="journeyId"
+                name="routeId"
                 render={({ field }) => (
                     <FormItem className="flex flex-col pt-2">
-                        <FormLabel>Available Journey</FormLabel>
+                        <FormLabel>Select Route</FormLabel>
                         <Select 
                             onValueChange={(value) => {
                                 field.onChange(value);
-                                form.setValue("seats", []); // Reset seats when session changes
+                                form.setValue("seats", []);
                             }} 
                             defaultValue={field.value}
-                            disabled={loadingJourneys || journeys.length === 0}
+                            disabled={loading || routes.length === 0}
                         >
                         <FormControl>
                             <SelectTrigger>
                                 <SelectValue placeholder={
-                                    loadingJourneys ? "Loading journeys..." :
-                                    journeys.length === 0 ? "No journeys available" :
-                                    "Select an available journey"
+                                    loading ? "Loading routes..." :
+                                    routes.length === 0 ? "No routes available" :
+                                    "Select a route"
                                 } />
                             </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                            {journeys.map((journey) => (
-                                <SelectItem key={journey.id} value={journey.id}>{`${journey.routeName} (GH₵ ${journey.price.toFixed(2)})`}</SelectItem>
+                            {routes.map((route) => (
+                                <SelectItem key={route.id} value={route.id}>{`${route.pickup} - ${route.destination} (GH₵ ${route.price.toFixed(2)})`}</SelectItem>
                             ))}
                         </SelectContent>
                         </Select>
@@ -293,8 +275,42 @@ export function BookingForm() {
                 )}
             />
         </div>
+
+        <FormField
+            control={form.control}
+            name="busId"
+            render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Select Bus</FormLabel>
+                    <Select 
+                        onValueChange={(value) => {
+                            field.onChange(value);
+                            form.setValue("seats", []); // Reset seats when bus changes
+                        }} 
+                        defaultValue={field.value}
+                        disabled={loading || buses.length === 0}
+                    >
+                    <FormControl>
+                        <SelectTrigger>
+                            <SelectValue placeholder={
+                                loading ? "Loading buses..." :
+                                buses.length === 0 ? "No buses available" :
+                                "Select a bus"
+                            } />
+                        </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                        {buses.map((bus) => (
+                            <SelectItem key={bus.id} value={bus.id}>{`${bus.numberPlate} (${bus.capacity} Seater)`}</SelectItem>
+                        ))}
+                    </SelectContent>
+                    </Select>
+                    <FormMessage />
+                </FormItem>
+            )}
+        />
         
-        {selectedJourney && (
+        {selectedBus && (
           <FormField
             control={form.control}
             name="seats"
@@ -303,7 +319,7 @@ export function BookingForm() {
                 <FormLabel>Select Your Seat(s)</FormLabel>
                 <FormControl>
                   <SeatSelection
-                    capacity={selectedJourney.capacity}
+                    capacity={selectedBus.capacity}
                     selectedSeats={field.value}
                     onSeatsChange={field.onChange}
                   />
