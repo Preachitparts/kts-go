@@ -20,6 +20,7 @@ import {
   Settings,
   LogOut,
   UserCircle,
+  Map,
 } from "lucide-react";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -71,6 +72,14 @@ export default function AdminLayout({
                 <Link href="/admin/buses">
                   <Bus />
                   Buses
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild>
+                <Link href="/admin/routes">
+                  <Map />
+                  Routes
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

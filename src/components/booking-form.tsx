@@ -8,7 +8,7 @@ import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import React from "react";
-import { collection, addDoc, doc, setDoc } from "firebase/firestore";
+import { collection, addDoc, doc, setDoc, getDocs } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -49,19 +49,35 @@ const bookingSchema = z.object({
   emergencyContact: z.string().regex(/^(\+233|0)[2-9]\d{8}$/, "Invalid Ghanaian phone number."),
 });
 
-const pickupPoints = ["Accra", "Kumasi", "Takoradi", "Cape Coast", "Sunyani"];
-const destinations = ["Accra", "Kumasi", "Takoradi", "Cape Coast", "Sunyani"];
+type Route = { id: string; pickup: string; destination: string; price: number };
+
 const buses = {
   KTS1: { name: "KTS1 - 32 Seater", capacity: 32 },
   KTS2: { name: "KTS2 - 40 Seater", capacity: 40 },
 };
-const SEAT_PRICE = 75;
 
 export function BookingForm() {
   const router = useRouter();
   const { toast } = useToast();
   const [totalAmount, setTotalAmount] = React.useState(0);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [routes, setRoutes] = React.useState<Route[]>([]);
+  const [seatPrice, setSeatPrice] = React.useState(0);
+
+  React.useEffect(() => {
+    const fetchRoutes = async () => {
+      try {
+        const routesCollection = collection(db, "routes");
+        const routesSnapshot = await getDocs(routesCollection);
+        const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
+        setRoutes(routesList);
+      } catch (error) {
+        console.error("Error fetching routes: ", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not fetch routes." });
+      }
+    };
+    fetchRoutes();
+  }, [toast]);
 
   const form = useForm<z.infer<typeof bookingSchema>>({
     resolver: zodResolver(bookingSchema),
@@ -71,17 +87,43 @@ export function BookingForm() {
       seats: [],
       emergencyContact: "",
       busType: "",
+      pickup: "",
+      destination: "",
     },
   });
 
   const selectedBusType = form.watch("busType");
   const selectedSeats = form.watch("seats");
+  const selectedPickup = form.watch("pickup");
+  const selectedDestination = form.watch("destination");
+
+  const pickupPoints = React.useMemo(() => [...new Set(routes.map(r => r.pickup))], [routes]);
+  const destinations = React.useMemo(() => {
+      if (!selectedPickup) return [...new Set(routes.map(r => r.destination))];
+      return [...new Set(routes.filter(r => r.pickup === selectedPickup).map(r => r.destination))];
+  }, [routes, selectedPickup]);
+
 
   React.useEffect(() => {
-    setTotalAmount(selectedSeats.length * SEAT_PRICE);
-  }, [selectedSeats]);
+    const route = routes.find(r => r.pickup === selectedPickup && r.destination === selectedDestination);
+    const newPrice = route ? route.price : 0;
+    setSeatPrice(newPrice);
+  }, [selectedPickup, selectedDestination, routes]);
+
+
+  React.useEffect(() => {
+    setTotalAmount(selectedSeats.length * seatPrice);
+  }, [selectedSeats, seatPrice]);
 
   async function onSubmit(values: z.infer<typeof bookingSchema>) {
+    if (seatPrice <= 0) {
+        toast({
+            variant: "destructive",
+            title: "Invalid Route",
+            description: "The selected route is not valid. Please select another route.",
+        });
+        return;
+    }
     setIsSubmitting(true);
     try {
       const ticketNumber = `KTS${Date.now().toString().slice(-6)}`;
@@ -161,7 +203,13 @@ export function BookingForm() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Pickup Point</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select 
+                    onValueChange={(value) => {
+                        field.onChange(value);
+                        form.setValue("destination", "");
+                    }} 
+                    defaultValue={field.value}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select a pickup point" />
@@ -181,7 +229,11 @@ export function BookingForm() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Destination</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select 
+                    onValueChange={field.onChange} 
+                    defaultValue={field.value}
+                    disabled={!selectedPickup}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select a destination" />
