@@ -8,7 +8,7 @@ import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import React from "react";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, getDoc, documentId } from "firebase/firestore";
 import axios from "axios";
 
 import { Button } from "@/components/ui/button";
@@ -49,7 +49,7 @@ const bookingSchema = z.object({
   emergencyContact: z.string().regex(/^(\+233|0)[2-9]\d{8}$/, "Invalid Ghanaian phone number."),
 });
 
-type Route = { id: string; pickup: string; destination: string; price: number; status: boolean; };
+type Route = { id: string; pickup: string; destination: string; price: number; status: boolean; busIds?: string[] };
 type Bus = { id: string; numberPlate: string; capacity: number; status: boolean; };
 
 export function BookingForm() {
@@ -58,8 +58,9 @@ export function BookingForm() {
   const [totalAmount, setTotalAmount] = React.useState(0);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [routes, setRoutes] = React.useState<Route[]>([]);
-  const [buses, setBuses] = React.useState<Bus[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const [availableBuses, setAvailableBuses] = React.useState<Bus[]>([]);
+  const [loadingRoutes, setLoadingRoutes] = React.useState(true);
+  const [loadingBuses, setLoadingBuses] = React.useState(false);
 
   const form = useForm<z.infer<typeof bookingSchema>>({
     resolver: zodResolver(bookingSchema),
@@ -77,41 +78,65 @@ export function BookingForm() {
   const selectedBusId = form.watch("busId");
   const selectedSeats = form.watch("seats");
 
+  // Fetch active routes on component mount
   React.useEffect(() => {
-    const fetchPrerequisites = async () => {
-      setLoading(true);
+    const fetchRoutes = async () => {
+      setLoadingRoutes(true);
       try {
         const routesQuery = query(collection(db, "routes"), where("status", "==", true));
-        const busesQuery = query(collection(db, "buses"), where("status", "==", true));
-        
-        const [routesSnapshot, busesSnapshot] = await Promise.all([
-            getDocs(routesQuery),
-            getDocs(busesQuery)
-        ]);
-        
+        const routesSnapshot = await getDocs(routesQuery);
         const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
-        const busesList = busesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bus));
-        
         setRoutes(routesList);
-        setBuses(busesList);
-
       } catch (error) {
-        console.error("Error fetching prerequisites: ", error);
-        toast({ variant: "destructive", title: "Error", description: "Could not fetch available journeys." });
+        console.error("Error fetching routes: ", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not fetch available routes." });
       } finally {
-        setLoading(false);
+        setLoadingRoutes(false);
       }
     };
-    fetchPrerequisites();
+    fetchRoutes();
   }, [toast]);
+  
+  // Fetch assigned buses when a route is selected
+  React.useEffect(() => {
+    const fetchBusesForRoute = async () => {
+      if (!selectedRouteId) {
+        setAvailableBuses([]);
+        return;
+      }
+      setLoadingBuses(true);
+      form.setValue("busId", ""); // Reset bus selection
+      try {
+        const route = routes.find(r => r.id === selectedRouteId);
+        if (route && route.busIds && route.busIds.length > 0) {
+            const busesQuery = query(collection(db, "buses"), where(documentId(), "in", route.busIds));
+            const busesSnapshot = await getDocs(busesQuery);
+            const busesList = busesSnapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() } as Bus))
+                .filter(bus => bus.status === true); // Ensure the assigned bus is also active
+            setAvailableBuses(busesList);
+        } else {
+             setAvailableBuses([]);
+        }
+      } catch (error) {
+        console.error("Error fetching buses for route: ", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not fetch buses for the selected route." });
+        setAvailableBuses([]);
+      } finally {
+        setLoadingBuses(false);
+      }
+    };
+
+    fetchBusesForRoute();
+  }, [selectedRouteId, routes, toast, form]);
 
   const selectedRoute = React.useMemo(() => {
     return routes.find(r => r.id === selectedRouteId);
   }, [routes, selectedRouteId]);
   
   const selectedBus = React.useMemo(() => {
-    return buses.find(b => b.id === selectedBusId);
-  }, [buses, selectedBusId]);
+    return availableBuses.find(b => b.id === selectedBusId);
+  }, [availableBuses, selectedBusId]);
 
   React.useEffect(() => {
     const price = selectedRoute ? selectedRoute.price : 0;
@@ -239,14 +264,15 @@ export function BookingForm() {
                             onValueChange={(value) => {
                                 field.onChange(value);
                                 form.setValue("seats", []);
+                                setAvailableBuses([]);
                             }} 
                             defaultValue={field.value}
-                            disabled={loading || routes.length === 0}
+                            disabled={loadingRoutes || routes.length === 0}
                         >
                         <FormControl>
                             <SelectTrigger>
                                 <SelectValue placeholder={
-                                    loading ? "Loading routes..." :
+                                    loadingRoutes ? "Loading routes..." :
                                     routes.length === 0 ? "No routes available" :
                                     "Select a route"
                                 } />
@@ -276,19 +302,20 @@ export function BookingForm() {
                             form.setValue("seats", []); // Reset seats when bus changes
                         }} 
                         defaultValue={field.value}
-                        disabled={loading || buses.length === 0}
+                        disabled={!selectedRouteId || loadingBuses || availableBuses.length === 0}
                     >
                     <FormControl>
                         <SelectTrigger>
                             <SelectValue placeholder={
-                                loading ? "Loading buses..." :
-                                buses.length === 0 ? "No buses available" :
+                                loadingBuses ? "Loading buses..." :
+                                !selectedRouteId ? "Select a route first" :
+                                availableBuses.length === 0 ? "No buses for this route" :
                                 "Select a bus"
                             } />
                         </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                        {buses.map((bus) => (
+                        {availableBuses.map((bus) => (
                             <SelectItem key={bus.id} value={bus.id}>{`${bus.numberPlate} (${bus.capacity} Seater)`}</SelectItem>
                         ))}
                     </SelectContent>

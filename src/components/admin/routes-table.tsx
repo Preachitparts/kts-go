@@ -15,14 +15,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PlusCircle, Loader2, Trash2, Pencil, ArrowRightLeft, CheckCircle } from "lucide-react";
 import { useEffect, useState } from "react";
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, writeBatch } from "firebase/firestore";
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, writeBatch, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Switch } from "../ui/switch";
+import { Checkbox } from "../ui/checkbox";
+import { ScrollArea } from "../ui/scroll-area";
 
 const routeSchema = z.object({
   pickup: z.string().min(1, "Pickup point is required."),
@@ -32,12 +34,15 @@ const routeSchema = z.object({
     z.number().positive("Price must be a positive number.")
   ),
   status: z.boolean().default(true),
+  busIds: z.array(z.string()).min(1, "You must assign at least one bus to this route."),
 });
 
 type Route = z.infer<typeof routeSchema> & { id: string };
+type Bus = { id: string; numberPlate: string; capacity: number; status: boolean; };
 
 export default function RoutesTable() {
   const [routes, setRoutes] = useState<Route[]>([]);
+  const [buses, setBuses] = useState<Bus[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -51,26 +56,37 @@ export default function RoutesTable() {
         destination: "",
         price: 0,
         status: true,
+        busIds: [],
     }
   });
 
-  const fetchRoutes = async () => {
+  const fetchPrerequisites = async () => {
     setLoading(true);
     try {
       const routesCollection = collection(db, "routes");
-      const routesSnapshot = await getDocs(routesCollection);
-      const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
+      const busesQuery = query(collection(db, "buses"), where("status", "==", true));
+
+      const [routesSnapshot, busesSnapshot] = await Promise.all([
+        getDocs(routesCollection),
+        getDocs(busesQuery)
+      ]);
+      
+      const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), busIds: doc.data().busIds || [] } as Route));
+      const busesList = busesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bus));
+
       setRoutes(routesList);
+      setBuses(busesList);
+
     } catch (error) {
-      console.error("Error fetching routes: ", error);
-      toast({ variant: "destructive", title: "Error", description: "Could not fetch routes." });
+      console.error("Error fetching prerequisites: ", error);
+      toast({ variant: "destructive", title: "Error", description: "Could not fetch routes or buses." });
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchRoutes();
+    fetchPrerequisites();
   }, []);
 
   const handleEditClick = (route: Route) => {
@@ -80,6 +96,7 @@ export default function RoutesTable() {
       destination: route.destination,
       price: route.price,
       status: route.status,
+      busIds: route.busIds || [],
     });
     setIsDialogOpen(true);
   };
@@ -88,7 +105,7 @@ export default function RoutesTable() {
     try {
         await deleteDoc(doc(db, "routes", routeId));
         toast({ title: "Success", description: "Route deleted successfully." });
-        fetchRoutes(); // Refresh the list
+        fetchPrerequisites(); // Refresh the list
     } catch (error) {
         console.error("Error deleting route: ", error);
         toast({ variant: "destructive", title: "Error", description: "Failed to delete route." });
@@ -103,7 +120,7 @@ export default function RoutesTable() {
         destination: route.pickup,
       });
       toast({ title: "Success", description: "Route swapped successfully." });
-      fetchRoutes(); // Refresh the list
+      fetchPrerequisites(); // Refresh the list
     } catch (error) {
       console.error("Error swapping route: ", error);
       toast({ variant: "destructive", title: "Error", description: "Failed to swap route." });
@@ -115,7 +132,7 @@ export default function RoutesTable() {
         const routeDoc = doc(db, "routes", route.id);
         await updateDoc(routeDoc, { status: newStatus });
         toast({ title: "Success", description: `Route ${newStatus ? 'activated' : 'deactivated'}.` });
-        fetchRoutes();
+        fetchPrerequisites();
     } catch (error) {
         console.error("Error updating route status: ", error);
         toast({ variant: "destructive", title: "Error", description: "Failed to update route status." });
@@ -133,7 +150,7 @@ export default function RoutesTable() {
     try {
         await batch.commit();
         toast({ title: "Success", description: "All routes have been activated." });
-        fetchRoutes();
+        fetchPrerequisites();
     } catch (error) {
         console.error("Error activating all routes: ", error);
         toast({ variant: "destructive", title: "Error", description: "Failed to activate all routes." });
@@ -154,10 +171,10 @@ export default function RoutesTable() {
         await addDoc(collection(db, "routes"), values);
         toast({ title: "Success", description: "Route added successfully." });
       }
-      fetchRoutes();
+      fetchPrerequisites();
       setIsDialogOpen(false);
       setEditingRoute(null);
-      form.reset({ pickup: "", destination: "", price: 0, status: true });
+      form.reset({ pickup: "", destination: "", price: 0, status: true, busIds: [] });
     } catch (error) {
       console.error("Error saving route: ", error);
       toast({ variant: "destructive", title: "Error", description: "Could not save route." });
@@ -168,7 +185,7 @@ export default function RoutesTable() {
 
   const openNewRouteDialog = () => {
     setEditingRoute(null);
-    form.reset({ pickup: "", destination: "", price: 0, status: true });
+    form.reset({ pickup: "", destination: "", price: 0, status: true, busIds: [] });
     setIsDialogOpen(true);
   };
 
@@ -199,17 +216,17 @@ export default function RoutesTable() {
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="pickup" className="text-right">Pickup</Label>
                 <Input id="pickup" {...form.register("pickup")} className="col-span-3" />
-                {form.formState.errors.pickup && <p className="col-span-4 text-red-500 text-xs">{form.formState.errors.pickup.message}</p>}
+                {form.formState.errors.pickup && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.pickup.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="destination" className="text-right">Destination</Label>
                 <Input id="destination" {...form.register("destination")} className="col-span-3" />
-                 {form.formState.errors.destination && <p className="col-span-4 text-red-500 text-xs">{form.formState.errors.destination.message}</p>}
+                 {form.formState.errors.destination && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.destination.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="price" className="text-right">Price (GH₵)</Label>
                 <Input id="price" type="number" step="0.01" {...form.register("price")} className="col-span-3" />
-                 {form.formState.errors.price && <p className="col-span-4 text-red-500 text-xs">{form.formState.errors.price.message}</p>}
+                 {form.formState.errors.price && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.price.message}</p>}
               </div>
                <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="status" className="text-right">Active</Label>
@@ -219,6 +236,41 @@ export default function RoutesTable() {
                         onCheckedChange={(checked) => form.setValue("status", checked)}
                     />
                 </div>
+
+                <div>
+                  <Label>Assign Buses</Label>
+                  <ScrollArea className="h-40 w-full rounded-md border p-4 mt-2">
+                    <Controller
+                        name="busIds"
+                        control={form.control}
+                        render={({ field }) => (
+                            <div className="space-y-2">
+                                {buses.map((bus) => (
+                                    <div key={bus.id} className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id={bus.id}
+                                            checked={field.value?.includes(bus.id)}
+                                            onCheckedChange={(checked) => {
+                                                const currentBusIds = field.value || [];
+                                                if (checked) {
+                                                    field.onChange([...currentBusIds, bus.id]);
+                                                } else {
+                                                    field.onChange(currentBusIds.filter((id) => id !== bus.id));
+                                                }
+                                            }}
+                                        />
+                                        <label htmlFor={bus.id} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                            {bus.numberPlate} ({bus.capacity} Seater)
+                                        </label>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    />
+                  </ScrollArea>
+                   {form.formState.errors.busIds && <p className="text-red-500 text-xs mt-1">{form.formState.errors.busIds.message}</p>}
+                </div>
+
               <DialogFooter>
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -234,6 +286,7 @@ export default function RoutesTable() {
           <TableRow>
             <TableHead>Route</TableHead>
             <TableHead>Price (GH₵)</TableHead>
+            <TableHead>Assigned Buses</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
@@ -243,6 +296,7 @@ export default function RoutesTable() {
             <TableRow key={route.id}>
               <TableCell>{route.pickup} - {route.destination}</TableCell>
               <TableCell>{route.price.toFixed(2)}</TableCell>
+              <TableCell>{route.busIds?.length || 0}</TableCell>
               <TableCell>
                   <Switch
                     checked={route.status}
