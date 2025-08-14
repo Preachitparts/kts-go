@@ -6,7 +6,7 @@ export default function RoutesPage() {
         <Card>
             <CardHeader>
                 <CardTitle>Manage Routes & Fares</CardTitle>
-                <CardDescription>Add, edit, and manage bus routes and their prices.</CardDescription>
+                <CardDescription>Add, edit, and manage bus routes. Only active routes will be available for booking.</CardDescription>
             </CardHeader>
             <CardContent>
                 <RoutesTable />

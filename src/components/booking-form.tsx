@@ -8,7 +8,7 @@ import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import React from "react";
-import { collection, addDoc, doc, setDoc, getDocs, query, where, Timestamp } from "firebase/firestore";
+import { collection, addDoc, doc, setDoc, getDocs, query, where } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -42,25 +42,22 @@ const bookingSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
   phone: z.string().regex(/^(\+233|0)[2-9]\d{8}$/, "Invalid Ghanaian phone number."),
   date: z.date({ required_error: "Departure date is required." }),
-  sessionId: z.string().min(1, "Please select an available journey."),
+  journeyId: z.string().min(1, "Please select an available journey."),
   seats: z.array(z.string()).min(1, "Please select at least one seat."),
   emergencyContact: z.string().regex(/^(\+233|0)[2-9]\d{8}$/, "Invalid Ghanaian phone number."),
 });
 
-type Session = { 
-  id: string; 
-  routeId: string; 
-  busId: string; 
-  departureDate: Timestamp; 
-};
-type Route = { id: string; pickup: string; destination: string; price: number };
-type Bus = { id: string; numberPlate: string; capacity: number; status: string; };
+type Route = { id: string; pickup: string; destination: string; price: number; status: boolean; };
+type Bus = { id: string; numberPlate: string; capacity: number; status: boolean; };
 
-type EnrichedSession = Session & {
+type Journey = {
+    id: string; // combination of routeId and busId
     routeName: string;
     busName: string;
     price: number;
     capacity: number;
+    routeId: string;
+    busId: string;
 };
 
 export function BookingForm() {
@@ -68,10 +65,8 @@ export function BookingForm() {
   const { toast } = useToast();
   const [totalAmount, setTotalAmount] = React.useState(0);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [sessions, setSessions] = React.useState<EnrichedSession[]>([]);
-  const [routes, setRoutes] = React.useState<Route[]>([]);
-  const [buses, setBuses] = React.useState<Bus[]>([]);
-  const [loadingSessions, setLoadingSessions] = React.useState(false);
+  const [journeys, setJourneys] = React.useState<Journey[]>([]);
+  const [loadingJourneys, setLoadingJourneys] = React.useState(true);
 
   const form = useForm<z.infer<typeof bookingSchema>>({
     resolver: zodResolver(bookingSchema),
@@ -80,100 +75,67 @@ export function BookingForm() {
       phone: "",
       seats: [],
       emergencyContact: "",
-      sessionId: "",
+      journeyId: "",
     },
   });
   
   const selectedDate = form.watch("date");
-  const selectedSessionId = form.watch("sessionId");
+  const selectedJourneyId = form.watch("journeyId");
   const selectedSeats = form.watch("seats");
 
-  // Fetch routes and buses once on component mount
   React.useEffect(() => {
     const fetchPrerequisites = async () => {
+      setLoadingJourneys(true);
       try {
-        const routesCollection = collection(db, "routes");
-        const busesCollection = collection(db, "buses");
+        const routesQuery = query(collection(db, "routes"), where("status", "==", true));
+        const busesQuery = query(collection(db, "buses"), where("status", "==", true));
         
         const [routesSnapshot, busesSnapshot] = await Promise.all([
-            getDocs(routesCollection),
-            getDocs(busesCollection)
+            getDocs(routesQuery),
+            getDocs(busesQuery)
         ]);
         
         const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
         const busesList = busesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bus));
         
-        setRoutes(routesList);
-        setBuses(busesList);
+        const availableJourneys: Journey[] = [];
+        routesList.forEach(route => {
+            busesList.forEach(bus => {
+                availableJourneys.push({
+                    id: `${route.id}_${bus.id}`,
+                    routeName: `${route.pickup} - ${route.destination}`,
+                    busName: bus.numberPlate,
+                    price: route.price,
+                    capacity: bus.capacity,
+                    routeId: route.id,
+                    busId: bus.id,
+                });
+            });
+        });
+
+        setJourneys(availableJourneys);
+
       } catch (error) {
         console.error("Error fetching prerequisites: ", error);
-        toast({ variant: "destructive", title: "Error", description: "Could not fetch routes or buses." });
+        toast({ variant: "destructive", title: "Error", description: "Could not fetch available journeys." });
+      } finally {
+        setLoadingJourneys(false);
       }
     };
     fetchPrerequisites();
   }, [toast]);
 
-  // Fetch sessions when a date is selected
-  React.useEffect(() => {
-    if (!selectedDate || routes.length === 0 || buses.length === 0) {
-      setSessions([]);
-      return;
-    };
-
-    const fetchSessions = async () => {
-      setLoadingSessions(true);
-      form.setValue("sessionId", ""); // Reset session when date changes
-      try {
-        const startOfDay = new Date(selectedDate);
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date(selectedDate);
-        endOfDay.setHours(23, 59, 59, 999);
-
-        const sessionsQuery = query(
-          collection(db, "sessions"),
-          where("departureDate", ">=", Timestamp.fromDate(startOfDay)),
-          where("departureDate", "<=", Timestamp.fromDate(endOfDay))
-        );
-        
-        const sessionsSnapshot = await getDocs(sessionsQuery);
-        const sessionsList = sessionsSnapshot.docs.map(doc => {
-          const data = doc.data() as Omit<Session, 'id'>;
-          const route = routes.find(r => r.id === data.routeId);
-          const bus = buses.find(b => b.id === data.busId);
-          return {
-            id: doc.id,
-            ...data,
-            routeName: route ? `${route.pickup} - ${route.destination}` : 'Unknown Route',
-            busName: bus ? `${bus.numberPlate}` : 'Unknown Bus',
-            price: route ? route.price : 0,
-            capacity: bus ? bus.capacity : 0,
-          };
-        }).filter(s => s.price > 0 && s.capacity > 0); // Filter out invalid sessions
-
-        setSessions(sessionsList);
-
-      } catch (error) {
-        console.error("Error fetching sessions: ", error);
-        toast({ variant: "destructive", title: "Error", description: "Could not fetch available journeys." });
-      } finally {
-          setLoadingSessions(false);
-      }
-    };
-
-    fetchSessions();
-  }, [selectedDate, routes, buses, toast, form]);
-
-  const selectedSession = React.useMemo(() => {
-    return sessions.find(s => s.id === selectedSessionId);
-  }, [sessions, selectedSessionId]);
+  const selectedJourney = React.useMemo(() => {
+    return journeys.find(s => s.id === selectedJourneyId);
+  }, [journeys, selectedJourneyId]);
 
   React.useEffect(() => {
-    const price = selectedSession ? selectedSession.price : 0;
+    const price = selectedJourney ? selectedJourney.price : 0;
     setTotalAmount(selectedSeats.length * price);
-  }, [selectedSeats, selectedSession]);
+  }, [selectedSeats, selectedJourney]);
 
   async function onSubmit(values: z.infer<typeof bookingSchema>) {
-    if (!selectedSession) {
+    if (!selectedJourney) {
         toast({ variant: "destructive", title: "Error", description: "Selected journey is not valid." });
         return;
     }
@@ -187,12 +149,14 @@ export function BookingForm() {
         emergencyContact: values.emergencyContact,
         date: values.date.toISOString(),
         seats: values.seats.join(','),
-        pickup: selectedSession.routeName.split(' - ')[0],
-        destination: selectedSession.routeName.split(' - ')[1],
-        busType: `${selectedSession.busName} - ${selectedSession.capacity} Seater`,
+        pickup: selectedJourney.routeName.split(' - ')[0],
+        destination: selectedJourney.routeName.split(' - ')[1],
+        busType: `${selectedJourney.busName} - ${selectedJourney.capacity} Seater`,
         totalAmount,
         ticketNumber,
-        sessionId: values.sessionId,
+        journeyId: values.journeyId,
+        routeId: selectedJourney.routeId,
+        busId: selectedJourney.busId,
       };
 
       // Save passenger info
@@ -297,7 +261,7 @@ export function BookingForm() {
             />
             <FormField
                 control={form.control}
-                name="sessionId"
+                name="journeyId"
                 render={({ field }) => (
                     <FormItem className="flex flex-col pt-2">
                         <FormLabel>Available Journey</FormLabel>
@@ -307,21 +271,20 @@ export function BookingForm() {
                                 form.setValue("seats", []); // Reset seats when session changes
                             }} 
                             defaultValue={field.value}
-                            disabled={!selectedDate || loadingSessions || sessions.length === 0}
+                            disabled={loadingJourneys || journeys.length === 0}
                         >
                         <FormControl>
                             <SelectTrigger>
                                 <SelectValue placeholder={
-                                    !selectedDate ? "Select a date first" :
-                                    loadingSessions ? "Loading journeys..." :
-                                    sessions.length === 0 ? "No journeys available" :
+                                    loadingJourneys ? "Loading journeys..." :
+                                    journeys.length === 0 ? "No journeys available" :
                                     "Select an available journey"
                                 } />
                             </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                            {sessions.map((session) => (
-                                <SelectItem key={session.id} value={session.id}>{`${session.routeName} (GH₵ ${session.price.toFixed(2)})`}</SelectItem>
+                            {journeys.map((journey) => (
+                                <SelectItem key={journey.id} value={journey.id}>{`${journey.routeName} (GH₵ ${journey.price.toFixed(2)})`}</SelectItem>
                             ))}
                         </SelectContent>
                         </Select>
@@ -331,7 +294,7 @@ export function BookingForm() {
             />
         </div>
         
-        {selectedSession && (
+        {selectedJourney && (
           <FormField
             control={form.control}
             name="seats"
@@ -340,7 +303,7 @@ export function BookingForm() {
                 <FormLabel>Select Your Seat(s)</FormLabel>
                 <FormControl>
                   <SeatSelection
-                    capacity={selectedSession.capacity}
+                    capacity={selectedJourney.capacity}
                     selectedSeats={field.value}
                     onSeatsChange={field.onChange}
                   />

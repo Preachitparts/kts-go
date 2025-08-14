@@ -22,6 +22,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Switch } from "../ui/switch";
 
 const routeSchema = z.object({
   pickup: z.string().min(1, "Pickup point is required."),
@@ -30,6 +31,7 @@ const routeSchema = z.object({
     (a) => parseFloat(z.string().parse(a)),
     z.number().positive("Price must be a positive number.")
   ),
+  status: z.boolean().default(true),
 });
 
 type Route = z.infer<typeof routeSchema> & { id: string };
@@ -44,6 +46,12 @@ export default function RoutesTable() {
 
   const form = useForm<z.infer<typeof routeSchema>>({
     resolver: zodResolver(routeSchema),
+    defaultValues: {
+        pickup: "",
+        destination: "",
+        price: 0,
+        status: true,
+    }
   });
 
   const fetchRoutes = async () => {
@@ -71,6 +79,7 @@ export default function RoutesTable() {
       pickup: route.pickup,
       destination: route.destination,
       price: route.price,
+      status: route.status,
     });
     setIsDialogOpen(true);
   };
@@ -101,6 +110,19 @@ export default function RoutesTable() {
     }
   };
 
+  const handleStatusChange = async (route: Route, newStatus: boolean) => {
+    try {
+        const routeDoc = doc(db, "routes", route.id);
+        await updateDoc(routeDoc, { status: newStatus });
+        toast({ title: "Success", description: `Route ${newStatus ? 'activated' : 'deactivated'}.` });
+        fetchRoutes();
+    } catch (error) {
+        console.error("Error updating route status: ", error);
+        toast({ variant: "destructive", title: "Error", description: "Failed to update route status." });
+    }
+  };
+
+
   const onSubmit = async (values: z.infer<typeof routeSchema>) => {
     setIsSubmitting(true);
     try {
@@ -117,7 +139,7 @@ export default function RoutesTable() {
       fetchRoutes();
       setIsDialogOpen(false);
       setEditingRoute(null);
-      form.reset({ pickup: "", destination: "", price: 0 });
+      form.reset({ pickup: "", destination: "", price: 0, status: true });
     } catch (error) {
       console.error("Error saving route: ", error);
       toast({ variant: "destructive", title: "Error", description: "Could not save route." });
@@ -128,7 +150,7 @@ export default function RoutesTable() {
 
   const openNewRouteDialog = () => {
     setEditingRoute(null);
-    form.reset({ pickup: "", destination: "", price: 0 });
+    form.reset({ pickup: "", destination: "", price: 0, status: true });
     setIsDialogOpen(true);
   };
 
@@ -168,6 +190,14 @@ export default function RoutesTable() {
                 <Input id="price" type="number" step="0.01" {...form.register("price")} className="col-span-3" />
                  {form.formState.errors.price && <p className="col-span-4 text-red-500 text-xs">{form.formState.errors.price.message}</p>}
               </div>
+               <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="status" className="text-right">Active</Label>
+                    <Switch
+                        id="status"
+                        checked={form.watch("status")}
+                        onCheckedChange={(checked) => form.setValue("status", checked)}
+                    />
+                </div>
               <DialogFooter>
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -181,18 +211,24 @@ export default function RoutesTable() {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Pickup Point</TableHead>
-            <TableHead>Destination</TableHead>
+            <TableHead>Route</TableHead>
             <TableHead>Price (GH₵)</TableHead>
+            <TableHead>Status</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {routes.map((route) => (
             <TableRow key={route.id}>
-              <TableCell>{route.pickup}</TableCell>
-              <TableCell>{route.destination}</TableCell>
+              <TableCell>{route.pickup} - {route.destination}</TableCell>
               <TableCell>{route.price.toFixed(2)}</TableCell>
+              <TableCell>
+                  <Switch
+                    checked={route.status}
+                    onCheckedChange={(newStatus) => handleStatusChange(route, newStatus)}
+                    aria-readonly
+                  />
+              </TableCell>
               <TableCell className="text-right space-x-2">
                  <Button variant="outline" size="icon" onClick={() => handleSwap(route)}>
                   <ArrowRightLeft className="h-4 w-4" />

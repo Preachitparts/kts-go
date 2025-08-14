@@ -6,7 +6,7 @@ export default function BusesPage() {
         <Card>
             <CardHeader>
                 <CardTitle>Manage Buses</CardTitle>
-                <CardDescription>Add, edit, and manage your fleet of buses.</CardDescription>
+                <CardDescription>Add, edit, and manage your fleet of buses. Only active buses will be available for booking.</CardDescription>
             </CardHeader>
             <CardContent>
                 <BusesTable />

@@ -24,7 +24,6 @@ import {
   LogOut,
   UserCircle,
   Map,
-  CalendarClock,
 } from "lucide-react";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -139,14 +138,6 @@ export default function AdminLayout({
                 <Link href="/admin/routes">
                   <Map />
                   Routes
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname === '/admin/sessions'}>
-                <Link href="/admin/sessions">
-                  <CalendarClock />
-                  Sessions
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

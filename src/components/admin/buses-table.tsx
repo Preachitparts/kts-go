@@ -9,12 +9,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PlusCircle, Loader2, Trash2, Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from "firebase/firestore";
@@ -24,6 +22,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Switch } from "../ui/switch";
 
 const busSchema = z.object({
   numberPlate: z.string().min(1, "Number plate is required."),
@@ -31,7 +30,7 @@ const busSchema = z.object({
     (a) => parseInt(z.string().parse(a), 10),
     z.number().positive("Capacity must be a positive number.")
   ),
-  status: z.enum(["Active", "Maintenance", "Inactive"]),
+  status: z.boolean().default(true),
 });
 
 type Bus = z.infer<typeof busSchema> & { id: string };
@@ -49,7 +48,7 @@ export default function BusesTable() {
     defaultValues: {
       numberPlate: "",
       capacity: 32,
-      status: "Active",
+      status: true,
     }
   });
 
@@ -93,6 +92,18 @@ export default function BusesTable() {
     }
   };
 
+  const handleStatusChange = async (bus: Bus, newStatus: boolean) => {
+    try {
+        const busDoc = doc(db, "buses", bus.id);
+        await updateDoc(busDoc, { status: newStatus });
+        toast({ title: "Success", description: `Bus ${newStatus ? 'activated' : 'deactivated'}.` });
+        fetchBuses();
+    } catch (error) {
+        console.error("Error updating bus status: ", error);
+        toast({ variant: "destructive", title: "Error", description: "Failed to update bus status." });
+    }
+  };
+
   const onSubmit = async (values: z.infer<typeof busSchema>) => {
     setIsSubmitting(true);
     try {
@@ -107,7 +118,7 @@ export default function BusesTable() {
       fetchBuses();
       setIsDialogOpen(false);
       setEditingBus(null);
-      form.reset({ numberPlate: "", capacity: 32, status: "Active" });
+      form.reset({ numberPlate: "", capacity: 32, status: true });
     } catch (error) {
       console.error("Error saving bus: ", error);
       toast({ variant: "destructive", title: "Error", description: "Could not save bus." });
@@ -118,7 +129,7 @@ export default function BusesTable() {
 
   const openNewBusDialog = () => {
     setEditingBus(null);
-    form.reset({ numberPlate: "", capacity: 32, status: "Active" });
+    form.reset({ numberPlate: "", capacity: 32, status: true });
     setIsDialogOpen(true);
   };
 
@@ -154,17 +165,12 @@ export default function BusesTable() {
                     {form.formState.errors.capacity && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.capacity.message}</p>}
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="status" className="text-right">Status</Label>
-                    <Select onValueChange={(value) => form.setValue('status', value as "Active" | "Maintenance" | "Inactive")} defaultValue={form.getValues("status")}>
-                        <SelectTrigger className="col-span-3">
-                            <SelectValue placeholder="Select status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="Active">Active</SelectItem>
-                            <SelectItem value="Maintenance">Maintenance</SelectItem>
-                            <SelectItem value="Inactive">Inactive</SelectItem>
-                        </SelectContent>
-                    </Select>
+                    <Label htmlFor="status" className="text-right">Active</Label>
+                    <Switch
+                        id="status"
+                        checked={form.watch("status")}
+                        onCheckedChange={(checked) => form.setValue("status", checked)}
+                    />
                 </div>
 
                 <DialogFooter>
@@ -192,13 +198,11 @@ export default function BusesTable() {
               <TableCell>{bus.numberPlate}</TableCell>
               <TableCell>{bus.capacity}</TableCell>
               <TableCell>
-                  <Badge variant={
-                      bus.status === 'Active' ? 'default' : bus.status === 'Maintenance' ? 'destructive' : 'secondary'
-                  } className={
-                      bus.status === 'Active' ? 'bg-green-500' : bus.status === 'Maintenance' ? 'bg-orange-500' : ''
-                  }>
-                      {bus.status}
-                  </Badge>
+                  <Switch
+                    checked={bus.status}
+                    onCheckedChange={(newStatus) => handleStatusChange(bus, newStatus)}
+                    aria-readonly
+                  />
               </TableCell>
               <TableCell className="text-right space-x-2">
                 <Button variant="outline" size="icon" onClick={() => handleEditClick(bus)}>
