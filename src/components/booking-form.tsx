@@ -8,7 +8,7 @@ import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import React from "react";
-import { collection, addDoc, doc, setDoc, getDocs } from "firebase/firestore";
+import { collection, addDoc, doc, setDoc, getDocs, query, where, Timestamp } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -41,52 +41,37 @@ import { db } from "@/lib/firebase";
 const bookingSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
   phone: z.string().regex(/^(\+233|0)[2-9]\d{8}$/, "Invalid Ghanaian phone number."),
-  pickup: z.string().min(1, "Please select a pickup point."),
-  destination: z.string().min(1, "Please select a destination."),
   date: z.date({ required_error: "Departure date is required." }),
-  busType: z.string().min(1, "Please select a bus type."),
+  sessionId: z.string().min(1, "Please select an available journey."),
   seats: z.array(z.string()).min(1, "Please select at least one seat."),
   emergencyContact: z.string().regex(/^(\+233|0)[2-9]\d{8}$/, "Invalid Ghanaian phone number."),
 });
 
+type Session = { 
+  id: string; 
+  routeId: string; 
+  busId: string; 
+  departureDate: Timestamp; 
+};
 type Route = { id: string; pickup: string; destination: string; price: number };
 type Bus = { id: string; numberPlate: string; capacity: number; status: string; };
+
+type EnrichedSession = Session & {
+    routeName: string;
+    busName: string;
+    price: number;
+    capacity: number;
+};
 
 export function BookingForm() {
   const router = useRouter();
   const { toast } = useToast();
   const [totalAmount, setTotalAmount] = React.useState(0);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [sessions, setSessions] = React.useState<EnrichedSession[]>([]);
   const [routes, setRoutes] = React.useState<Route[]>([]);
   const [buses, setBuses] = React.useState<Bus[]>([]);
-  const [seatPrice, setSeatPrice] = React.useState(0);
-
-  React.useEffect(() => {
-    const fetchRoutes = async () => {
-      try {
-        const routesCollection = collection(db, "routes");
-        const routesSnapshot = await getDocs(routesCollection);
-        const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
-        setRoutes(routesList);
-      } catch (error) {
-        console.error("Error fetching routes: ", error);
-        toast({ variant: "destructive", title: "Error", description: "Could not fetch routes." });
-      }
-    };
-    const fetchBuses = async () => {
-        try {
-            const busesCollection = collection(db, "buses");
-            const busesSnapshot = await getDocs(busesCollection);
-            const busesList = busesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bus));
-            setBuses(busesList);
-        } catch (error) {
-            console.error("Error fetching buses: ", error);
-            toast({ variant: "destructive", title: "Error", description: "Could not fetch buses." });
-        }
-    };
-    fetchRoutes();
-    fetchBuses();
-  }, [toast]);
+  const [loadingSessions, setLoadingSessions] = React.useState(false);
 
   const form = useForm<z.infer<typeof bookingSchema>>({
     resolver: zodResolver(bookingSchema),
@@ -95,61 +80,119 @@ export function BookingForm() {
       phone: "",
       seats: [],
       emergencyContact: "",
-      busType: "",
-      pickup: "",
-      destination: "",
+      sessionId: "",
     },
   });
-
-  const selectedBusType = form.watch("busType");
-  const selectedSeats = form.watch("seats");
-  const selectedPickup = form.watch("pickup");
-  const selectedDestination = form.watch("destination");
-
-  const pickupPoints = React.useMemo(() => [...new Set(routes.map(r => r.pickup))], [routes]);
-  const destinations = React.useMemo(() => {
-      if (!selectedPickup) return [...new Set(routes.map(r => r.destination))];
-      return [...new Set(routes.filter(r => r.pickup === selectedPickup).map(r => r.destination))];
-  }, [routes, selectedPickup]);
-
-
-  React.useEffect(() => {
-    const route = routes.find(r => r.pickup === selectedPickup && r.destination === selectedDestination);
-    const newPrice = route ? route.price : 0;
-    setSeatPrice(newPrice);
-  }, [selectedPickup, selectedDestination, routes]);
-
-
-  React.useEffect(() => {
-    setTotalAmount(selectedSeats.length * seatPrice);
-  }, [selectedSeats, seatPrice]);
   
-  const selectedBus = React.useMemo(() => {
-    return buses.find(b => b.id === selectedBusType);
-  }, [buses, selectedBusType]);
+  const selectedDate = form.watch("date");
+  const selectedSessionId = form.watch("sessionId");
+  const selectedSeats = form.watch("seats");
 
+  // Fetch routes and buses once on component mount
+  React.useEffect(() => {
+    const fetchPrerequisites = async () => {
+      try {
+        const routesCollection = collection(db, "routes");
+        const busesCollection = collection(db, "buses");
+        
+        const [routesSnapshot, busesSnapshot] = await Promise.all([
+            getDocs(routesCollection),
+            getDocs(busesCollection)
+        ]);
+        
+        const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
+        const busesList = busesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bus));
+        
+        setRoutes(routesList);
+        setBuses(busesList);
+      } catch (error) {
+        console.error("Error fetching prerequisites: ", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not fetch routes or buses." });
+      }
+    };
+    fetchPrerequisites();
+  }, [toast]);
+
+  // Fetch sessions when a date is selected
+  React.useEffect(() => {
+    if (!selectedDate || routes.length === 0 || buses.length === 0) {
+      setSessions([]);
+      return;
+    };
+
+    const fetchSessions = async () => {
+      setLoadingSessions(true);
+      form.setValue("sessionId", ""); // Reset session when date changes
+      try {
+        const startOfDay = new Date(selectedDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(selectedDate);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        const sessionsQuery = query(
+          collection(db, "sessions"),
+          where("departureDate", ">=", Timestamp.fromDate(startOfDay)),
+          where("departureDate", "<=", Timestamp.fromDate(endOfDay))
+        );
+        
+        const sessionsSnapshot = await getDocs(sessionsQuery);
+        const sessionsList = sessionsSnapshot.docs.map(doc => {
+          const data = doc.data() as Omit<Session, 'id'>;
+          const route = routes.find(r => r.id === data.routeId);
+          const bus = buses.find(b => b.id === data.busId);
+          return {
+            id: doc.id,
+            ...data,
+            routeName: route ? `${route.pickup} - ${route.destination}` : 'Unknown Route',
+            busName: bus ? `${bus.numberPlate}` : 'Unknown Bus',
+            price: route ? route.price : 0,
+            capacity: bus ? bus.capacity : 0,
+          };
+        }).filter(s => s.price > 0 && s.capacity > 0); // Filter out invalid sessions
+
+        setSessions(sessionsList);
+
+      } catch (error) {
+        console.error("Error fetching sessions: ", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not fetch available journeys." });
+      } finally {
+          setLoadingSessions(false);
+      }
+    };
+
+    fetchSessions();
+  }, [selectedDate, routes, buses, toast, form]);
+
+  const selectedSession = React.useMemo(() => {
+    return sessions.find(s => s.id === selectedSessionId);
+  }, [sessions, selectedSessionId]);
+
+  React.useEffect(() => {
+    const price = selectedSession ? selectedSession.price : 0;
+    setTotalAmount(selectedSeats.length * price);
+  }, [selectedSeats, selectedSession]);
 
   async function onSubmit(values: z.infer<typeof bookingSchema>) {
-    if (seatPrice <= 0) {
-        toast({
-            variant: "destructive",
-            title: "Invalid Route",
-            description: "The selected route is not valid. Please select another route.",
-        });
+    if (!selectedSession) {
+        toast({ variant: "destructive", title: "Error", description: "Selected journey is not valid." });
         return;
     }
     setIsSubmitting(true);
     try {
       const ticketNumber = `KTS${Date.now().toString().slice(-6)}`;
       
-      const busInfo = buses.find(b => b.id === values.busType);
       const bookingDetails = {
-        ...values,
-        totalAmount,
-        ticketNumber,
+        name: values.name,
+        phone: values.phone,
+        emergencyContact: values.emergencyContact,
         date: values.date.toISOString(),
         seats: values.seats.join(','),
-        busType: busInfo ? `${busInfo.numberPlate} - ${busInfo.capacity} Seater` : 'N/A',
+        pickup: selectedSession.routeName.split(' - ')[0],
+        destination: selectedSession.routeName.split(' - ')[1],
+        busType: `${selectedSession.busName} - ${selectedSession.capacity} Seater`,
+        totalAmount,
+        ticketNumber,
+        sessionId: values.sessionId,
       };
 
       // Save passenger info
@@ -213,58 +256,6 @@ export function BookingForm() {
           )}
         />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="pickup"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Pickup Point</FormLabel>
-                <Select 
-                    onValueChange={(value) => {
-                        field.onChange(value);
-                        form.setValue("destination", "");
-                    }} 
-                    defaultValue={field.value}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a pickup point" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {pickupPoints.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="destination"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Destination</FormLabel>
-                <Select 
-                    onValueChange={field.onChange} 
-                    defaultValue={field.value}
-                    disabled={!selectedPickup}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a destination" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                     {destinations.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
             control={form.control}
             name="date"
@@ -305,33 +296,42 @@ export function BookingForm() {
             )}
             />
             <FormField
-            control={form.control}
-            name="busType"
-            render={({ field }) => (
-                <FormItem className="flex flex-col pt-2">
-                    <FormLabel>Select Bus Type</FormLabel>
-                    <Select onValueChange={(value) => {
-                        field.onChange(value);
-                        form.setValue("seats", []); // Reset seats when bus type changes
-                    }} defaultValue={field.value}>
-                    <FormControl>
-                        <SelectTrigger>
-                        <SelectValue placeholder="Select a bus type" />
-                        </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                        {buses.filter(b => b.status === 'Active').map((bus) => (
-                            <SelectItem key={bus.id} value={bus.id}>{`${bus.numberPlate} - ${bus.capacity} Seater`}</SelectItem>
-                        ))}
-                    </SelectContent>
-                    </Select>
-                    <FormMessage />
-                </FormItem>
-            )}
+                control={form.control}
+                name="sessionId"
+                render={({ field }) => (
+                    <FormItem className="flex flex-col pt-2">
+                        <FormLabel>Available Journey</FormLabel>
+                        <Select 
+                            onValueChange={(value) => {
+                                field.onChange(value);
+                                form.setValue("seats", []); // Reset seats when session changes
+                            }} 
+                            defaultValue={field.value}
+                            disabled={!selectedDate || loadingSessions || sessions.length === 0}
+                        >
+                        <FormControl>
+                            <SelectTrigger>
+                                <SelectValue placeholder={
+                                    !selectedDate ? "Select a date first" :
+                                    loadingSessions ? "Loading journeys..." :
+                                    sessions.length === 0 ? "No journeys available" :
+                                    "Select an available journey"
+                                } />
+                            </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            {sessions.map((session) => (
+                                <SelectItem key={session.id} value={session.id}>{`${session.routeName} (GH₵ ${session.price.toFixed(2)})`}</SelectItem>
+                            ))}
+                        </SelectContent>
+                        </Select>
+                        <FormMessage />
+                    </FormItem>
+                )}
             />
         </div>
         
-        {selectedBus && (
+        {selectedSession && (
           <FormField
             control={form.control}
             name="seats"
@@ -340,7 +340,7 @@ export function BookingForm() {
                 <FormLabel>Select Your Seat(s)</FormLabel>
                 <FormControl>
                   <SeatSelection
-                    capacity={selectedBus.capacity}
+                    capacity={selectedSession.capacity}
                     selectedSeats={field.value}
                     onSeatsChange={field.onChange}
                   />
