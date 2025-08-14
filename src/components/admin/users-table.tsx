@@ -1,3 +1,5 @@
+"use client";
+
 import {
   Table,
   TableBody,
@@ -7,15 +9,36 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { useEffect, useState } from "react";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
-const users = [
-  { id: "AD001", name: "Michael Quaicoe", email: "michaelquaicoe60@gmail.com", role: "Super-Admin" },
-  { id: "AD002", name: "Jane Smith", email: "jane.smith@example.com", role: "Admin" },
-  { id: "AD003", name: "John Johnson", email: "john.johnson@example.com", role: "Manager" },
-  { id: "AD004", name: "Emily White", email: "emily.white@example.com", role: "Manager" },
-];
 
 export default function UsersTable() {
+    const [users, setUsers] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchUsers = async () => {
+            try {
+                const usersCollection = collection(db, "users");
+                const usersSnapshot = await getDocs(usersCollection);
+                const usersList = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setUsers(usersList);
+            } catch (error) {
+                console.error("Error fetching users: ", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchUsers();
+    }, []);
+
+    if (loading) {
+        return <div>Loading users...</div>;
+    }
+
   return (
     <Table>
       <TableHeader>

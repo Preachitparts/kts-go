@@ -8,6 +8,7 @@ import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import React from "react";
+import { collection, addDoc, doc, setDoc } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +36,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import SeatSelection from "./seat-selection";
+import { db } from "@/lib/firebase";
 
 const bookingSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
@@ -79,11 +81,9 @@ export function BookingForm() {
     setTotalAmount(selectedSeats.length * SEAT_PRICE);
   }, [selectedSeats]);
 
-  function onSubmit(values: z.infer<typeof bookingSchema>) {
+  async function onSubmit(values: z.infer<typeof bookingSchema>) {
     setIsSubmitting(true);
-    // Simulate payment processing
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
       const ticketNumber = `KTS${Date.now().toString().slice(-6)}`;
       
       const bookingDetails = {
@@ -93,6 +93,17 @@ export function BookingForm() {
         date: values.date.toISOString(),
         seats: values.seats.join(','),
       };
+
+      // Save passenger info
+      const passengerRef = doc(db, "passengers", values.phone);
+      await setDoc(passengerRef, {
+        name: values.name,
+        phone: values.phone,
+        emergencyContact: values.emergencyContact,
+      }, { merge: true });
+
+      // Save booking
+      await addDoc(collection(db, "bookings"), bookingDetails);
       
       const query = new URLSearchParams(bookingDetails as any).toString();
 
@@ -102,7 +113,16 @@ export function BookingForm() {
       });
 
       router.push(`/booking-confirmation?${query}`);
-    }, 2000);
+    } catch (error) {
+      console.error("Error creating booking:", error);
+      toast({
+        variant: "destructive",
+        title: "Booking Failed",
+        description: "Something went wrong. Please try again.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -207,7 +227,7 @@ export function BookingForm() {
                         mode="single"
                         selected={field.value}
                         onSelect={field.onChange}
-                        disabled={(date) => date < new Date() || date > new Date(new Date().setMonth(new Date().getMonth() + 3))}
+                        disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) || date > new Date(new Date().setMonth(new Date().getMonth() + 3))}
                         initialFocus
                     />
                     </PopoverContent>

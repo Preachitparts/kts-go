@@ -1,3 +1,5 @@
+"use client";
+
 import {
   Table,
   TableBody,
@@ -7,21 +9,40 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-
-const bookings = [
-  { id: "BK001", passenger: "Alice Johnson", route: "Accra - Kumasi", date: "2024-08-15", seats: 2, amount: 150, status: "Paid" },
-  { id: "BK002", passenger: "Bob Williams", route: "Takoradi - Accra", date: "2024-08-16", seats: 1, amount: 75, status: "Paid" },
-  { id: "BK003", passenger: "Charlie Brown", route: "Kumasi - Cape Coast", date: "2024-08-17", seats: 3, amount: 225, status: "Pending" },
-  { id: "BK004", passenger: "Diana Miller", route: "Sunyani - Accra", date: "2024-08-18", seats: 1, amount: 75, status: "Paid" },
-  { id: "BK005", passenger: "Ethan Davis", route: "Accra - Takoradi", date: "2024-08-19", seats: 4, amount: 300, status: "Paid" },
-];
+import { useEffect, useState } from "react";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export default function BookingsTable() {
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchBookings = async () => {
+      try {
+        const bookingsCollection = collection(db, "bookings");
+        const bookingsSnapshot = await getDocs(bookingsCollection);
+        const bookingsList = bookingsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setBookings(bookingsList);
+      } catch (error) {
+        console.error("Error fetching bookings: ", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBookings();
+  }, []);
+
+  if (loading) {
+    return <div>Loading bookings...</div>;
+  }
+
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>ID</TableHead>
+          <TableHead>Ticket Number</TableHead>
           <TableHead>Passenger</TableHead>
           <TableHead>Route</TableHead>
           <TableHead>Date</TableHead>
@@ -33,15 +54,15 @@ export default function BookingsTable() {
       <TableBody>
         {bookings.map((booking) => (
           <TableRow key={booking.id}>
-            <TableCell>{booking.id}</TableCell>
-            <TableCell>{booking.passenger}</TableCell>
-            <TableCell>{booking.route}</TableCell>
-            <TableCell>{booking.date}</TableCell>
+            <TableCell>{booking.ticketNumber}</TableCell>
+            <TableCell>{booking.name}</TableCell>
+            <TableCell>{`${booking.pickup} - ${booking.destination}`}</TableCell>
+            <TableCell>{new Date(booking.date).toLocaleDateString()}</TableCell>
             <TableCell>{booking.seats}</TableCell>
-            <TableCell>{booking.amount.toFixed(2)}</TableCell>
+            <TableCell>{booking.totalAmount?.toFixed(2)}</TableCell>
             <TableCell>
-                <Badge variant={booking.status === 'Paid' ? 'default' : 'secondary'} className={booking.status === 'Paid' ? 'bg-green-500' : 'bg-yellow-500'}>
-                    {booking.status}
+                <Badge variant={'default'} className={'bg-green-500'}>
+                    Paid
                 </Badge>
             </TableCell>
           </TableRow>
