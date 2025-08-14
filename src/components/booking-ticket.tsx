@@ -16,7 +16,7 @@ export default function BookingTicket() {
         pickup: searchParams.get('pickup') || 'N/A',
         destination: searchParams.get('destination') || 'N/A',
         date: searchParams.get('date') ? new Date(searchParams.get('date')!) : new Date(),
-        seats: searchParams.get('seats')?.split(',') || [],
+        seats: searchParams.get('seats') || '0', // Now represents number of seats
         emergencyContact: searchParams.get('emergencyContact') || 'N/A',
         totalAmount: Number(searchParams.get('totalAmount')) || 0,
         ticketNumber: searchParams.get('ticketNumber') || 'N/A',
@@ -85,19 +85,15 @@ export default function BookingTicket() {
                         <div className="flex items-start gap-3">
                             <Users className="size-5 mt-1 text-primary" />
                             <div>
-                                <p className="font-semibold">Seats Booked</p>
-                                <p className="text-muted-foreground">{bookingDetails.seats.length}</p>
+                                <p className="font-semibold">Number of Seats</p>
+                                <p className="text-muted-foreground">{bookingDetails.seats}</p>
                             </div>
                         </div>
                          <div className="flex items-start gap-3">
                             <Armchair className="size-5 mt-1 text-primary" />
                             <div>
                                 <p className="font-semibold">Seat Numbers</p>
-                                <div className="flex flex-wrap gap-1">
-                                    {bookingDetails.seats.map(seat => (
-                                        <span key={seat} className="bg-primary/10 text-primary font-medium text-xs px-2 py-1 rounded-full">{seat}</span>
-                                    ))}
-                                </div>
+                                <p className="text-muted-foreground">Assigned at terminal</p>
                             </div>
                         </div>
                     </div>
@@ -147,3 +143,4 @@ export default function BookingTicket() {
     );
 }
 
+    

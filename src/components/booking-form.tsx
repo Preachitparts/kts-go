@@ -36,7 +36,6 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import SeatSelection from "./seat-selection";
 import { db } from "@/lib/firebase";
 
 const bookingSchema = z.object({
@@ -45,13 +44,17 @@ const bookingSchema = z.object({
   date: z.date({ required_error: "Departure date is required." }),
   routeId: z.string().min(1, "Please select a route."),
   busId: z.string().min(1, "Please select a bus."),
-  seats: z.array(z.string()).min(1, "Please select at least one seat."),
+  numberOfSeats: z.preprocess(
+    (a) => parseInt(z.string().parse(a), 10),
+    z.number().positive("Please enter a valid number of seats.")
+  ),
   emergencyContact: z.string().regex(/^(\+233|0)[2-9]\d{8}$/, "Invalid Ghanaian phone number."),
   referralCode: z.string().optional(),
 });
 
 type Route = { id: string; pickup: string; destination: string; price: number; status: boolean; busIds?: string[] };
 type Bus = { id: string; numberPlate: string; capacity: number; status: boolean; };
+type Referral = { id: string; name: string; phone: string; };
 
 export function BookingForm() {
   const router = useRouter();
@@ -60,15 +63,17 @@ export function BookingForm() {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [routes, setRoutes] = React.useState<Route[]>([]);
   const [availableBuses, setAvailableBuses] = React.useState<Bus[]>([]);
+  const [referrals, setReferrals] = React.useState<Referral[]>([]);
   const [loadingRoutes, setLoadingRoutes] = React.useState(true);
   const [loadingBuses, setLoadingBuses] = React.useState(false);
+  const [loadingReferrals, setLoadingReferrals] = React.useState(true);
 
   const form = useForm<z.infer<typeof bookingSchema>>({
     resolver: zodResolver(bookingSchema),
     defaultValues: {
       name: "",
       phone: "",
-      seats: [],
+      numberOfSeats: 1,
       emergencyContact: "",
       routeId: "",
       busId: "",
@@ -77,8 +82,7 @@ export function BookingForm() {
   });
   
   const selectedRouteId = form.watch("routeId");
-  const selectedBusId = form.watch("busId");
-  const selectedSeats = form.watch("seats");
+  const numberOfSeats = form.watch("numberOfSeats");
 
   // Fetch active routes on component mount
   React.useEffect(() => {
@@ -99,6 +103,24 @@ export function BookingForm() {
     fetchRoutes();
   }, [toast]);
   
+  // Fetch referrals on component mount
+  React.useEffect(() => {
+    const fetchReferrals = async () => {
+        setLoadingReferrals(true);
+        try {
+            const referralsSnapshot = await getDocs(collection(db, "referrals"));
+            const referralsList = referralsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Referral));
+            setReferrals(referralsList);
+        } catch (error) {
+            console.error("Error fetching referrals: ", error);
+            toast({ variant: "destructive", title: "Error", description: "Could not fetch referrals." });
+        } finally {
+            setLoadingReferrals(false);
+        }
+    };
+    fetchReferrals();
+  }, [toast]);
+
   // Fetch assigned buses when a route is selected
   React.useEffect(() => {
     const fetchBusesForRoute = async () => {
@@ -135,17 +157,16 @@ export function BookingForm() {
   const selectedRoute = React.useMemo(() => {
     return routes.find(r => r.id === selectedRouteId);
   }, [routes, selectedRouteId]);
-  
-  const selectedBus = React.useMemo(() => {
-    return availableBuses.find(b => b.id === selectedBusId);
-  }, [availableBuses, selectedBusId]);
 
   React.useEffect(() => {
     const price = selectedRoute ? selectedRoute.price : 0;
-    setTotalAmount(selectedSeats.length * price);
-  }, [selectedSeats, selectedRoute]);
+    const numSeats = typeof numberOfSeats === 'number' && !isNaN(numberOfSeats) ? numberOfSeats : 0;
+    setTotalAmount(numSeats * price);
+  }, [numberOfSeats, selectedRoute]);
 
   async function onSubmit(values: z.infer<typeof bookingSchema>) {
+    const selectedBus = availableBuses.find(b => b.id === values.busId);
+
     if (!selectedRoute || !selectedBus) {
         toast({ variant: "destructive", title: "Error", description: "Selected route or bus is not valid." });
         return;
@@ -157,7 +178,7 @@ export function BookingForm() {
         phone: values.phone,
         emergencyContact: values.emergencyContact,
         date: values.date.toISOString(),
-        seats: values.seats.join(','),
+        seats: values.numberOfSeats.toString(),
         pickup: selectedRoute.pickup,
         destination: selectedRoute.destination,
         busType: `${selectedBus.numberPlate} - ${selectedBus.capacity} Seater`,
@@ -281,7 +302,7 @@ export function BookingForm() {
                         <Select 
                             onValueChange={(value) => {
                                 field.onChange(value);
-                                form.setValue("seats", []);
+                                form.setValue("busId", "");
                                 setAvailableBuses([]);
                             }} 
                             defaultValue={field.value}
@@ -315,10 +336,7 @@ export function BookingForm() {
                 <FormItem>
                     <FormLabel>Select Bus</FormLabel>
                     <Select 
-                        onValueChange={(value) => {
-                            field.onChange(value);
-                            form.setValue("seats", []); // Reset seats when bus changes
-                        }} 
+                        onValueChange={field.onChange}
                         defaultValue={field.value}
                         disabled={!selectedRouteId || loadingBuses || availableBuses.length === 0}
                     >
@@ -343,35 +361,45 @@ export function BookingForm() {
             )}
         />
         
-        {selectedBus && (
-          <FormField
+        <FormField
             control={form.control}
-            name="seats"
+            name="numberOfSeats"
             render={({ field }) => (
-              <FormItem>
-                <FormLabel>Select Your Seat(s)</FormLabel>
+                <FormItem>
+                <FormLabel>Number of Seats</FormLabel>
                 <FormControl>
-                  <SeatSelection
-                    capacity={selectedBus.capacity}
-                    selectedSeats={field.value}
-                    onSeatsChange={field.onChange}
-                  />
+                    <Input type="number" min="1" placeholder="e.g. 1" {...field} />
                 </FormControl>
                 <FormMessage />
-              </FormItem>
+                </FormItem>
             )}
-          />
-        )}
+        />
         
         <FormField
             control={form.control}
             name="referralCode"
             render={({ field }) => (
                 <FormItem>
-                <FormLabel>Referral Code (Optional)</FormLabel>
-                <FormControl>
-                    <Input placeholder="Enter referrer's phone number" {...field} />
-                </FormControl>
+                <FormLabel>Referral (Optional)</FormLabel>
+                 <Select 
+                    onValueChange={field.onChange} 
+                    defaultValue={field.value}
+                    disabled={loadingReferrals}
+                >
+                    <FormControl>
+                        <SelectTrigger>
+                            <SelectValue placeholder={
+                                loadingReferrals ? "Loading referrals..." : "Select a referral"
+                            } />
+                        </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                        <SelectItem value="">None</SelectItem>
+                        {referrals.map((referral) => (
+                            <SelectItem key={referral.id} value={referral.phone}>{referral.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
                 <FormMessage />
                 </FormItem>
             )}
@@ -396,3 +424,5 @@ export function BookingForm() {
     </Form>
   );
 }
+
+    
