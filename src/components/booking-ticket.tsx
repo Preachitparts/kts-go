@@ -1,9 +1,10 @@
+
 "use client";
 
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Bus, User, Phone, MapPin, Calendar, Users, Shield, Download } from "lucide-react";
+import { Bus, User, Phone, MapPin, Calendar, Users, Shield, Download, Armchair } from "lucide-react";
 import { format } from 'date-fns';
 
 export default function BookingTicket() {
@@ -15,10 +16,11 @@ export default function BookingTicket() {
         pickup: searchParams.get('pickup') || 'N/A',
         destination: searchParams.get('destination') || 'N/A',
         date: searchParams.get('date') ? new Date(searchParams.get('date')!) : new Date(),
-        seats: Number(searchParams.get('seats')) || 0,
+        seats: searchParams.get('seats')?.split(',') || [],
         emergencyContact: searchParams.get('emergencyContact') || 'N/A',
         totalAmount: Number(searchParams.get('totalAmount')) || 0,
         ticketNumber: searchParams.get('ticketNumber') || 'N/A',
+        busType: searchParams.get('busType') || 'N/A'
     };
 
     const handlePrint = () => {
@@ -64,6 +66,13 @@ export default function BookingTicket() {
                                 <p className="text-muted-foreground">{bookingDetails.emergencyContact}</p>
                             </div>
                         </div>
+                         <div className="flex items-start gap-3">
+                            <Bus className="size-5 mt-1 text-primary" />
+                            <div>
+                                <p className="font-semibold">Bus Type</p>
+                                <p className="text-muted-foreground">{bookingDetails.busType}</p>
+                            </div>
+                        </div>
                     </div>
                     <div className="space-y-4">
                         <div className="flex items-start gap-3">
@@ -76,8 +85,19 @@ export default function BookingTicket() {
                         <div className="flex items-start gap-3">
                             <Users className="size-5 mt-1 text-primary" />
                             <div>
-                                <p className="font-semibold">Seats</p>
-                                <p className="text-muted-foreground">{bookingDetails.seats}</p>
+                                <p className="font-semibold">Seats Booked</p>
+                                <p className="text-muted-foreground">{bookingDetails.seats.length}</p>
+                            </div>
+                        </div>
+                         <div className="flex items-start gap-3">
+                            <Armchair className="size-5 mt-1 text-primary" />
+                            <div>
+                                <p className="font-semibold">Seat Numbers</p>
+                                <div className="flex flex-wrap gap-1">
+                                    {bookingDetails.seats.map(seat => (
+                                        <span key={seat} className="bg-primary/10 text-primary font-medium text-xs px-2 py-1 rounded-full">{seat}</span>
+                                    ))}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -126,3 +146,4 @@ export default function BookingTicket() {
         </Card>
     );
 }
+

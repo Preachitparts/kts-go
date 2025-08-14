@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -33,6 +34,8 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import SeatSelection from "./seat-selection";
 
 const bookingSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
@@ -40,36 +43,42 @@ const bookingSchema = z.object({
   pickup: z.string().min(1, "Please select a pickup point."),
   destination: z.string().min(1, "Please select a destination."),
   date: z.date({ required_error: "Departure date is required." }),
-  seats: z.coerce.number().min(1, "At least 1 seat is required.").max(10, "Max 10 seats."),
+  busType: z.string().min(1, "Please select a bus type."),
+  seats: z.array(z.string()).min(1, "Please select at least one seat."),
   emergencyContact: z.string().regex(/^(\+233|0)[2-9]\d{8}$/, "Invalid Ghanaian phone number."),
 });
 
 const pickupPoints = ["Accra", "Kumasi", "Takoradi", "Cape Coast", "Sunyani"];
 const destinations = ["Accra", "Kumasi", "Takoradi", "Cape Coast", "Sunyani"];
+const buses = {
+  KTS1: { name: "KTS1 - 32 Seater", capacity: 32 },
+  KTS2: { name: "KTS2 - 40 Seater", capacity: 40 },
+};
 const SEAT_PRICE = 75;
 
 export function BookingForm() {
   const router = useRouter();
   const { toast } = useToast();
   const [totalAmount, setTotalAmount] = React.useState(0);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   const form = useForm<z.infer<typeof bookingSchema>>({
     resolver: zodResolver(bookingSchema),
     defaultValues: {
       name: "",
       phone: "",
-      seats: 1,
+      seats: [],
       emergencyContact: "",
+      busType: "",
     },
   });
 
-  const seats = form.watch("seats");
+  const selectedBusType = form.watch("busType");
+  const selectedSeats = form.watch("seats");
 
   React.useEffect(() => {
-    setTotalAmount(seats * SEAT_PRICE);
-  }, [seats]);
-
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
+    setTotalAmount(selectedSeats.length * SEAT_PRICE);
+  }, [selectedSeats]);
 
   function onSubmit(values: z.infer<typeof bookingSchema>) {
     setIsSubmitting(true);
@@ -83,6 +92,7 @@ export function BookingForm() {
         totalAmount,
         ticketNumber,
         date: values.date.toISOString(),
+        seats: values.seats.join(','),
       };
       
       const query = new URLSearchParams(bookingDetails as any).toString();
@@ -167,60 +177,97 @@ export function BookingForm() {
             )}
           />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-           <FormField
-            control={form.control}
-            name="date"
-            render={({ field }) => (
-              <FormItem className="flex flex-col pt-2">
-                <FormLabel>Departure Date</FormLabel>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <FormControl>
-                      <Button
-                        variant={"outline"}
-                        className={cn(
-                          "pl-3 text-left font-normal",
-                          !field.value && "text-muted-foreground"
-                        )}
-                      >
-                        {field.value ? (
-                          format(field.value, "PPP")
-                        ) : (
-                          <span>Pick a date</span>
-                        )}
-                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                      </Button>
-                    </FormControl>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={field.value}
-                      onSelect={field.onChange}
-                      disabled={(date) => date < new Date() || date > new Date(new Date().setMonth(new Date().getMonth() + 3))}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-           <FormField
+        <FormField
+          control={form.control}
+          name="date"
+          render={({ field }) => (
+            <FormItem className="flex flex-col pt-2">
+              <FormLabel>Departure Date</FormLabel>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <FormControl>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "pl-3 text-left font-normal",
+                        !field.value && "text-muted-foreground"
+                      )}
+                    >
+                      {field.value ? (
+                        format(field.value, "PPP")
+                      ) : (
+                        <span>Pick a date</span>
+                      )}
+                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                    </Button>
+                  </FormControl>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={field.value}
+                    onSelect={field.onChange}
+                    disabled={(date) => date < new Date() || date > new Date(new Date().setMonth(new Date().getMonth() + 3))}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        
+        <FormField
+          control={form.control}
+          name="busType"
+          render={({ field }) => (
+            <FormItem className="space-y-3">
+              <FormLabel>Select Bus Type</FormLabel>
+              <FormControl>
+                <RadioGroup
+                  onValueChange={(value) => {
+                    field.onChange(value);
+                    form.setValue("seats", []); // Reset seats when bus type changes
+                  }}
+                  defaultValue={field.value}
+                  className="flex flex-col space-y-1"
+                >
+                  {Object.entries(buses).map(([key, bus]) => (
+                    <FormItem key={key} className="flex items-center space-x-3 space-y-0">
+                      <FormControl>
+                        <RadioGroupItem value={key} />
+                      </FormControl>
+                      <FormLabel className="font-normal">{bus.name}</FormLabel>
+                    </FormItem>
+                  ))}
+                </RadioGroup>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {selectedBusType && (
+          <FormField
             control={form.control}
             name="seats"
             render={({ field }) => (
-              <FormItem className="pt-2">
-                <FormLabel>Number of Seats</FormLabel>
+              <FormItem>
+                <FormLabel>Select Your Seat(s)</FormLabel>
                 <FormControl>
-                  <Input type="number" min="1" max="10" {...field} />
+                  <SeatSelection
+                    busType={selectedBusType}
+                    capacity={buses[selectedBusType as keyof typeof buses].capacity}
+                    selectedSeats={field.value}
+                    onSeatsChange={field.onChange}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-        </div>
+        )}
+
         <FormField
           control={form.control}
           name="emergencyContact"
