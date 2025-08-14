@@ -34,7 +34,7 @@ const routeSchema = z.object({
     z.number().positive("Price must be a positive number.")
   ),
   status: z.boolean().default(true),
-  busIds: z.array(z.string()).min(1, "You must assign at least one bus to this route."),
+  busIds: z.array(z.string()).optional(),
 });
 
 type Route = z.infer<typeof routeSchema> & { id: string };
@@ -161,14 +161,15 @@ export default function RoutesTable() {
   const onSubmit = async (values: z.infer<typeof routeSchema>) => {
     setIsSubmitting(true);
     try {
+      const submissionValues = { ...values, busIds: values.busIds || [] };
       if (editingRoute) {
         // Update existing route
         const routeDoc = doc(db, "routes", editingRoute.id);
-        await updateDoc(routeDoc, values);
+        await updateDoc(routeDoc, submissionValues);
         toast({ title: "Success", description: "Route updated successfully." });
       } else {
         // Add new route
-        await addDoc(collection(db, "routes"), values);
+        await addDoc(collection(db, "routes"), submissionValues);
         toast({ title: "Success", description: "Route added successfully." });
       }
       fetchPrerequisites();
@@ -238,7 +239,7 @@ export default function RoutesTable() {
                 </div>
 
                 <div>
-                  <Label>Assign Buses</Label>
+                  <Label>Assign Buses (Optional)</Label>
                   <ScrollArea className="h-40 w-full rounded-md border p-4 mt-2">
                     <Controller
                         name="busIds"
