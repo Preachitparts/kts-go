@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -6,6 +7,9 @@ import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Loader2, Bus } from "lucide-react";
+import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -31,35 +35,52 @@ export default function AdminLoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const auth = getAuth();
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: "michaelquaicoe60@gmail.com",
-      password: "admin",
+      email: "",
+      password: "",
       rememberMe: false,
     },
   });
 
-  function onSubmit(values: z.infer<typeof loginSchema>) {
+  async function onSubmit(values: z.infer<typeof loginSchema>) {
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      if (
-        values.email === "michaelquaicoe60@gmail.com" &&
-        values.password === "admin"
-      ) {
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, values.email, values.password);
+      const user = userCredential.user;
+
+      // Check if user exists in the admin `users` collection
+      const userDoc = await getDoc(doc(db, "users", user.uid));
+      if (userDoc.exists()) {
         toast({ title: "Login Successful", description: "Welcome back!" });
         router.push("/admin");
       } else {
+        await auth.signOut();
         toast({
           variant: "destructive",
           title: "Login Failed",
-          description: "Invalid credentials. Please try again.",
+          description: "You are not authorized to access this panel.",
         });
       }
+    } catch (error: any) {
+      let description = "Invalid credentials. Please try again.";
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+          description = "Invalid email or password.";
+      } else if (error.code === 'auth/invalid-credential') {
+          description = "Invalid credentials provided.";
+      }
+      toast({
+        variant: "destructive",
+        title: "Login Failed",
+        description: description,
+      });
+      console.error(error);
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   }
 
   return (

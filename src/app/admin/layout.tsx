@@ -1,3 +1,6 @@
+
+"use client";
+
 import {
   SidebarProvider,
   Sidebar,
@@ -24,12 +27,60 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { getAuth, signOut, onAuthStateChanged } from "firebase/auth";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const router = useRouter();
+  const auth = getAuth();
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [userName, setUserName] = useState("Admin");
+  const [userRole, setUserRole] = useState("Admin");
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setUser(user);
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setUserName(userData.name);
+            setUserRole(userData.role);
+        }
+      } else {
+        router.push("/admin/login");
+      }
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, [auth, router]);
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      router.push("/admin/login");
+    } catch (error) {
+      console.error("Logout failed", error);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        Loading...
+      </div>
+    );
+  }
+
+
   return (
     <SidebarProvider>
       <Sidebar>
@@ -115,21 +166,19 @@ export default function AdminLayout({
                 <div className="flex items-center gap-3 p-2">
                     <Avatar>
                         <AvatarImage src="https://github.com/shadcn.png" alt="@shadcn" />
-                        <AvatarFallback>MQ</AvatarFallback>
+                        <AvatarFallback>{userName.charAt(0)}</AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col">
-                        <span className="font-semibold text-sm">Michael Quaicoe</span>
-                        <span className="text-xs text-muted-foreground">Super Admin</span>
+                        <span className="font-semibold text-sm">{userName}</span>
+                        <span className="text-xs text-muted-foreground">{userRole}</span>
                     </div>
                 </div>
             </SidebarMenuItem>
              <SidebarMenuItem>
-               <SidebarMenuButton asChild>
-                <Link href="/admin/login">
+               <SidebarMenuButton onClick={handleLogout}>
                   <LogOut />
                   Logout
-                </Link>
-              </SidebarMenuButton>
+                </SidebarMenuButton>
             </SidebarMenuItem>
            </SidebarMenu>
         </SidebarFooter>
