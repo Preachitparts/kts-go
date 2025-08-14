@@ -8,16 +8,23 @@ import { getAuth } from "firebase/auth";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyAMzrHohlmU1D0mUrsbUsrmwkIrcJ8A5bs",
-  authDomain: "kts-go-ca9do.firebaseapp.com",
-  projectId: "kts-go-ca9do",
-  storageBucket: "kts-go-ca9do.appspot.com",
-  messagingSenderId: "99006736811",
-  appId: "1:99006736811:web:735262da0ed184bb948aee"
+  apiKey: "AIzaSyANdr4m7IuVgvyPEJwrp-Ix9CaxyArBW5M",
+  authDomain: "kts-go.firebaseapp.com",
+  projectId: "kts-go",
+  storageBucket: "kts-go.appspot.com",
+  messagingSenderId: "733494640668",
+  appId: "1:733494640668:web:62ca8eb3202c28a1d59fd9"
 };
 
+
 // Initialize Firebase
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+let app;
+if (!getApps().length) {
+    app = initializeApp(firebaseConfig);
+} else {
+    app = getApp();
+}
+
 const db = getFirestore(app);
 const auth = getAuth(app);
 
