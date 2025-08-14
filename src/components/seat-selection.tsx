@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 
 interface SeatSelectionProps {
-  busType: string;
   capacity: number;
   selectedSeats: string[];
   onSeatsChange: (seats: string[]) => void;

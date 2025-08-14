@@ -46,6 +46,11 @@ export default function BusesTable() {
 
   const form = useForm<z.infer<typeof busSchema>>({
     resolver: zodResolver(busSchema),
+    defaultValues: {
+      numberPlate: "",
+      capacity: 32,
+      status: "Active",
+    }
   });
 
   const fetchBuses = async () => {
@@ -65,7 +70,7 @@ export default function BusesTable() {
 
   useEffect(() => {
     fetchBuses();
-  }, []);
+  }, [toast]);
 
   const handleEditClick = (bus: Bus) => {
     setEditingBus(bus);
@@ -102,7 +107,7 @@ export default function BusesTable() {
       fetchBuses();
       setIsDialogOpen(false);
       setEditingBus(null);
-      form.reset({ numberPlate: "", capacity: 0, status: "Active" });
+      form.reset({ numberPlate: "", capacity: 32, status: "Active" });
     } catch (error) {
       console.error("Error saving bus: ", error);
       toast({ variant: "destructive", title: "Error", description: "Could not save bus." });
@@ -141,12 +146,12 @@ export default function BusesTable() {
                 <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="numberPlate" className="text-right">Number Plate</Label>
                     <Input id="numberPlate" {...form.register("numberPlate")} className="col-span-3" />
-                    {form.formState.errors.numberPlate && <p className="col-span-4 text-red-500 text-xs">{form.formState.errors.numberPlate.message}</p>}
+                    {form.formState.errors.numberPlate && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.numberPlate.message}</p>}
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="capacity" className="text-right">Capacity</Label>
                     <Input id="capacity" type="number" {...form.register("capacity")} className="col-span-3" />
-                    {form.formState.errors.capacity && <p className="col-span-4 text-red-500 text-xs">{form.formState.errors.capacity.message}</p>}
+                    {form.formState.errors.capacity && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.capacity.message}</p>}
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="status" className="text-right">Status</Label>
