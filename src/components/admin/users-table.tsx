@@ -14,7 +14,7 @@ import { useEffect, useState } from "react";
 import { collection, getDocs, doc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Button } from "../ui/button";
-import { Loader2, PlusCircle } from "lucide-react";
+import { Eye, EyeOff, Loader2, PlusCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "../ui/dialog";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -40,6 +40,7 @@ export default function UsersTable() {
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
     const { toast } = useToast();
 
     const form = useForm<AdminFormValues>({
@@ -92,7 +93,7 @@ export default function UsersTable() {
             form.reset();
         } catch (error: any) {
             console.error("Error creating admin: ", error);
-            toast({ variant: "destructive", title: "Error", description: error.message });
+            toast({ variant: "destructive", title: "Error", description: error.message || "An unknown error occurred. check the server logs for details." });
         } finally {
             setIsSubmitting(false);
         }
@@ -132,7 +133,24 @@ export default function UsersTable() {
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="password" className="text-right">Password</Label>
-                        <Input id="password" type="password" {...form.register("password")} className="col-span-3" />
+                         <div className="relative col-span-3">
+                            <Input 
+                                id="password" 
+                                type={showPassword ? "text" : "password"} 
+                                {...form.register("password")} 
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground"
+                                >
+                                {showPassword ? (
+                                    <EyeOff className="h-5 w-5" />
+                                ) : (
+                                    <Eye className="h-5 w-5" />
+                                )}
+                            </button>
+                        </div>
                         {form.formState.errors.password && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.password.message}</p>}
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
