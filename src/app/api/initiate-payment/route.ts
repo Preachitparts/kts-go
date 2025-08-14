@@ -35,10 +35,10 @@ export async function POST(req: NextRequest) {
         }
 
         const ticketNumber = `KTS${Date.now().toString().slice(-6)}`;
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+        const appUrl = process.env.APP_URL;
 
         if (!appUrl) {
-            throw new Error("NEXT_PUBLIC_APP_URL is not set in environment variables.");
+            throw new Error("APP_URL is not set in environment variables.");
         }
         
         const pendingBookingData = {
