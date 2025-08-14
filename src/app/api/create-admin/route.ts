@@ -4,41 +4,39 @@ import * as admin from "firebase-admin";
 
 // Function to initialize Firebase Admin SDK
 function initializeFirebaseAdmin() {
-    // Check if the app is already initialized to avoid re-initializing
-    if (!admin.apps.length) {
-        try {
-            const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+    if (admin.apps.length > 0) {
+        return; // Already initialized
+    }
 
-            // Check if the environment variable is actually loaded.
-            if (!serviceAccountString) {
-                console.error("FIREBASE_SERVICE_ACCOUNT_KEY is not set in the environment variables.");
-                throw new Error("Server configuration error: Missing Firebase credentials.");
-            }
-            
-            // Parse the service account key from the string.
-            const serviceAccount = JSON.parse(serviceAccountString);
+    try {
+        const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
 
-            // Initialize the app with the credentials.
-            admin.initializeApp({
-                credential: admin.credential.cert(serviceAccount)
-            });
-
-            console.log("Firebase Admin SDK initialized successfully.");
-
-        } catch (error: any) {
-            // Log the detailed error for server-side debugging. This is crucial.
-            console.error("Firebase admin initialization error:", error.message);
-            // Do not proceed if initialization fails. The error will be handled by the check below.
+        if (!serviceAccountString || serviceAccountString.trim() === '') {
+            console.error("Firebase Admin SDK Error: FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set or empty.");
+            throw new Error("Server configuration error: Missing Firebase credentials.");
         }
+        
+        const serviceAccount = JSON.parse(serviceAccountString);
+
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount)
+        });
+
+        console.log("Firebase Admin SDK initialized successfully.");
+
+    } catch (error: any) {
+        if (error instanceof SyntaxError) {
+             console.error("Firebase Admin SDK Error: Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY. The JSON is malformed.", error.message);
+        } else {
+             console.error("Firebase Admin SDK Error: Initialization failed.", error.message);
+        }
+        // Do not proceed if initialization fails. The error will be handled by the check below.
     }
 }
 
 export async function POST(req: NextRequest) {
-    // Attempt to initialize on every request, the function itself prevents re-initialization.
     initializeFirebaseAdmin();
 
-    // After attempting initialization, check if it was successful.
-    // This is the gatekeeper that prevents the function from proceeding if init failed.
     if (!admin.apps.length) {
         return NextResponse.json({ error: 'Firebase Admin SDK could not be initialized. Check server logs for details.' }, { status: 500 });
     }
