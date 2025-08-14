@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
         
         const pendingBookingData = {
             ...body,
-            referralId,
+            referralId: referralId || null,
             ticketNumber,
             status: 'pending' // Add a pending status
         };

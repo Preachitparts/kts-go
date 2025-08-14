@@ -186,7 +186,7 @@ export function BookingForm() {
         totalAmount,
         routeId: values.routeId,
         busId: values.busId,
-        referralCode: values.referralCode,
+        referralCode: values.referralCode === "none" ? undefined : values.referralCode,
       };
 
       const response = await axios.post('/api/initiate-payment', bookingDetails);
@@ -405,7 +405,7 @@ export function BookingForm() {
                         </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="none">None</SelectItem>
                         {referrals.map((referral) => (
                             <SelectItem key={referral.id} value={referral.phone}>{referral.name}</SelectItem>
                         ))}
