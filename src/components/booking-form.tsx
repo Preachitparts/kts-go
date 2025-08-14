@@ -47,6 +47,7 @@ const bookingSchema = z.object({
   busId: z.string().min(1, "Please select a bus."),
   seats: z.array(z.string()).min(1, "Please select at least one seat."),
   emergencyContact: z.string().regex(/^(\+233|0)[2-9]\d{8}$/, "Invalid Ghanaian phone number."),
+  referralCode: z.string().optional(),
 });
 
 type Route = { id: string; pickup: string; destination: string; price: number; status: boolean; busIds?: string[] };
@@ -71,6 +72,7 @@ export function BookingForm() {
       emergencyContact: "",
       routeId: "",
       busId: "",
+      referralCode: "",
     },
   });
   
@@ -162,6 +164,7 @@ export function BookingForm() {
         totalAmount,
         routeId: values.routeId,
         busId: values.busId,
+        referralCode: values.referralCode,
       };
 
       const response = await axios.post('/api/initiate-payment', bookingDetails);
@@ -201,19 +204,34 @@ export function BookingForm() {
             </FormItem>
           )}
         />
-        <FormField
-          control={form.control}
-          name="phone"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Phone Number</FormLabel>
-              <FormControl>
-                <Input placeholder="e.g. 0243762748" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField
+            control={form.control}
+            name="phone"
+            render={({ field }) => (
+                <FormItem>
+                <FormLabel>Phone Number</FormLabel>
+                <FormControl>
+                    <Input placeholder="e.g. 0243762748" {...field} />
+                </FormControl>
+                <FormMessage />
+                </FormItem>
+            )}
+            />
+            <FormField
+            control={form.control}
+            name="emergencyContact"
+            render={({ field }) => (
+                <FormItem>
+                <FormLabel>Emergency Contact</FormLabel>
+                <FormControl>
+                    <Input placeholder="e.g. 0201234567" {...field} />
+                </FormControl>
+                <FormMessage />
+                </FormItem>
+            )}
+            />
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
             control={form.control}
@@ -344,19 +362,19 @@ export function BookingForm() {
             )}
           />
         )}
-
+        
         <FormField
-          control={form.control}
-          name="emergencyContact"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Emergency Contact</FormLabel>
-              <FormControl>
-                <Input placeholder="e.g. 0201234567" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+            control={form.control}
+            name="referralCode"
+            render={({ field }) => (
+                <FormItem>
+                <FormLabel>Referral Code (Optional)</FormLabel>
+                <FormControl>
+                    <Input placeholder="Enter referrer's phone number" {...field} />
+                </FormControl>
+                <FormMessage />
+                </FormItem>
+            )}
         />
         
         <div className="bg-secondary p-4 rounded-lg text-center mt-4">

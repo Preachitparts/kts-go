@@ -24,6 +24,7 @@ import {
   LogOut,
   UserCircle,
   Map,
+  HeartHandshake,
 } from "lucide-react";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -138,6 +139,14 @@ export default function AdminLayout({
                 <Link href="/admin/routes">
                   <Map />
                   Routes
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={pathname === '/admin/referrals'}>
+                <Link href="/admin/referrals">
+                  <HeartHandshake />
+                  Referrals
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

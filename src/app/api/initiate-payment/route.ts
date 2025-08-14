@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import axios from "axios";
 import { z } from "zod";
-import { collection, addDoc } from "firebase/firestore";
+import { collection, addDoc, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 const paymentSchema = z.object({
@@ -17,12 +17,22 @@ const paymentSchema = z.object({
   totalAmount: z.number(),
   routeId: z.string(),
   busId: z.string(),
+  referralCode: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
     try {
         const rawBody = await req.json();
         const body = paymentSchema.parse(rawBody);
+
+        let referralId = null;
+        if (body.referralCode) {
+            const referralsQuery = query(collection(db, "referrals"), where("phone", "==", body.referralCode));
+            const referralsSnapshot = await getDocs(referralsQuery);
+            if (!referralsSnapshot.empty) {
+                referralId = referralsSnapshot.docs[0].id;
+            }
+        }
 
         const ticketNumber = `KTS${Date.now().toString().slice(-6)}`;
         const appUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -33,6 +43,7 @@ export async function POST(req: NextRequest) {
         
         const pendingBookingData = {
             ...body,
+            referralId,
             ticketNumber,
             status: 'pending' // Add a pending status
         };
