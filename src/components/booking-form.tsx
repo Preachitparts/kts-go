@@ -50,11 +50,7 @@ const bookingSchema = z.object({
 });
 
 type Route = { id: string; pickup: string; destination: string; price: number };
-
-const buses = {
-  KTS1: { name: "KTS1 - 32 Seater", capacity: 32 },
-  KTS2: { name: "KTS2 - 40 Seater", capacity: 40 },
-};
+type Bus = { id: string; numberPlate: string; capacity: number; status: string; };
 
 export function BookingForm() {
   const router = useRouter();
@@ -62,6 +58,7 @@ export function BookingForm() {
   const [totalAmount, setTotalAmount] = React.useState(0);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [routes, setRoutes] = React.useState<Route[]>([]);
+  const [buses, setBuses] = React.useState<Bus[]>([]);
   const [seatPrice, setSeatPrice] = React.useState(0);
 
   React.useEffect(() => {
@@ -76,7 +73,19 @@ export function BookingForm() {
         toast({ variant: "destructive", title: "Error", description: "Could not fetch routes." });
       }
     };
+    const fetchBuses = async () => {
+        try {
+            const busesCollection = collection(db, "buses");
+            const busesSnapshot = await getDocs(busesCollection);
+            const busesList = busesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bus));
+            setBuses(busesList);
+        } catch (error) {
+            console.error("Error fetching buses: ", error);
+            toast({ variant: "destructive", title: "Error", description: "Could not fetch buses." });
+        }
+    };
     fetchRoutes();
+    fetchBuses();
   }, [toast]);
 
   const form = useForm<z.infer<typeof bookingSchema>>({
@@ -114,6 +123,11 @@ export function BookingForm() {
   React.useEffect(() => {
     setTotalAmount(selectedSeats.length * seatPrice);
   }, [selectedSeats, seatPrice]);
+  
+  const selectedBus = React.useMemo(() => {
+    return buses.find(b => b.id === selectedBusType);
+  }, [buses, selectedBusType]);
+
 
   async function onSubmit(values: z.infer<typeof bookingSchema>) {
     if (seatPrice <= 0) {
@@ -128,12 +142,14 @@ export function BookingForm() {
     try {
       const ticketNumber = `KTS${Date.now().toString().slice(-6)}`;
       
+      const busInfo = buses.find(b => b.id === values.busType);
       const bookingDetails = {
         ...values,
         totalAmount,
         ticketNumber,
         date: values.date.toISOString(),
         seats: values.seats.join(','),
+        busType: busInfo ? `${busInfo.numberPlate} - ${busInfo.capacity} Seater` : 'N/A',
       };
 
       // Save passenger info
@@ -304,8 +320,8 @@ export function BookingForm() {
                         </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                        {Object.entries(buses).map(([key, bus]) => (
-                            <SelectItem key={key} value={key}>{bus.name}</SelectItem>
+                        {buses.filter(b => b.status === 'Active').map((bus) => (
+                            <SelectItem key={bus.id} value={bus.id}>{`${bus.numberPlate} - ${bus.capacity} Seater`}</SelectItem>
                         ))}
                     </SelectContent>
                     </Select>
@@ -315,7 +331,7 @@ export function BookingForm() {
             />
         </div>
         
-        {selectedBusType && (
+        {selectedBus && (
           <FormField
             control={form.control}
             name="seats"
@@ -324,8 +340,8 @@ export function BookingForm() {
                 <FormLabel>Select Your Seat(s)</FormLabel>
                 <FormControl>
                   <SeatSelection
-                    busType={selectedBusType}
-                    capacity={buses[selectedBusType as keyof typeof buses].capacity}
+                    busType={selectedBus.numberPlate}
+                    capacity={selectedBus.capacity}
                     selectedSeats={field.value}
                     onSeatsChange={field.onChange}
                   />
