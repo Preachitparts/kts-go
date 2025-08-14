@@ -8,12 +8,12 @@ import { getAuth } from "firebase/auth";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "kts-go",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyAMzrHohlmU1D0mUrsbUsrmwkIrcJ8A5bs",
+  authDomain: "kts-go-ca9do.firebaseapp.com",
+  projectId: "kts-go-ca9do",
+  storageBucket: "kts-go-ca9do.appspot.com",
+  messagingSenderId: "99006736811",
+  appId: "1:99006736811:web:735262da0ed184bb948aee"
 };
 
 // Initialize Firebase
