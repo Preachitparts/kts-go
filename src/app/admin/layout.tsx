@@ -28,7 +28,7 @@ import {
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getAuth, signOut, onAuthStateChanged } from "firebase/auth";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -39,6 +39,7 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const auth = getAuth();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -56,12 +57,14 @@ export default function AdminLayout({
             setUserRole(userData.role);
         }
       } else {
-        router.push("/admin/login");
+        if (pathname !== '/admin/login') {
+            router.push("/admin/login");
+        }
       }
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [auth, router]);
+  }, [auth, router, pathname]);
 
   const handleLogout = async () => {
     try {
@@ -71,6 +74,10 @@ export default function AdminLayout({
       console.error("Logout failed", error);
     }
   };
+
+  if (pathname === "/admin/login") {
+    return <>{children}</>;
+  }
 
   if (loading) {
     return (
