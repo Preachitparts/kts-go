@@ -14,7 +14,7 @@ import { useEffect, useState } from "react";
 import { collection, getDocs, doc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Button } from "../ui/button";
-import { Eye, EyeOff, Loader2, PlusCircle } from "lucide-react";
+import { Eye, EyeOff, Loader2, Pencil, PlusCircle, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "../ui/dialog";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -23,6 +23,7 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "../ui/alert-dialog";
 
 
 const adminSchema = z.object({
@@ -97,6 +98,18 @@ export default function UsersTable() {
         } finally {
             setIsSubmitting(false);
         }
+    };
+
+    const handleDelete = (userId: string) => {
+        // TODO: Implement delete functionality
+        console.log("Delete user:", userId);
+        toast({ title: "Info", description: "Delete functionality not yet implemented." });
+    };
+
+    const handleEdit = (user: any) => {
+        // TODO: Implement edit functionality
+        console.log("Edit user:", user);
+        toast({ title: "Info", description: "Edit functionality not yet implemented." });
     };
 
 
@@ -179,17 +192,18 @@ export default function UsersTable() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>ID</TableHead>
+              <TableHead>#</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {users.length > 0 ? (
-                users.map((user) => (
+                users.map((user, index) => (
                   <TableRow key={user.id}>
-                    <TableCell>{user.id}</TableCell>
+                    <TableCell>{index + 1}</TableCell>
                     <TableCell>{user.name}</TableCell>
                     <TableCell>{user.email}</TableCell>
                     <TableCell>
@@ -197,11 +211,38 @@ export default function UsersTable() {
                           {user.role}
                       </Badge>
                     </TableCell>
+                    <TableCell className="text-right space-x-2">
+                        <Button variant="outline" size="icon" onClick={() => handleEdit(user)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="destructive" size="icon">
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        This action cannot be undone. This will permanently delete the admin
+                                        from the database.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDelete(user.id)}>
+                                        Delete
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    </TableCell>
                   </TableRow>
                 ))
             ) : (
                 <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground">
+                    <TableCell colSpan={5} className="text-center text-muted-foreground">
                         No admin users found. Use the button above to add one.
                     </TableCell>
                 </TableRow>
