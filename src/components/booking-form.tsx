@@ -8,7 +8,8 @@ import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import React from "react";
-import { collection, addDoc, doc, setDoc, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import axios from "axios";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -124,8 +125,6 @@ export function BookingForm() {
     }
     setIsSubmitting(true);
     try {
-      const ticketNumber = `KTS${Date.now().toString().slice(-6)}`;
-      
       const bookingDetails = {
         name: values.name,
         phone: values.phone,
@@ -136,36 +135,25 @@ export function BookingForm() {
         destination: selectedRoute.destination,
         busType: `${selectedBus.numberPlate} - ${selectedBus.capacity} Seater`,
         totalAmount,
-        ticketNumber,
         routeId: values.routeId,
         busId: values.busId,
       };
 
-      // Save passenger info
-      const passengerRef = doc(db, "passengers", values.phone);
-      await setDoc(passengerRef, {
-        name: values.name,
-        phone: values.phone,
-        emergencyContact: values.emergencyContact,
-      }, { merge: true });
+      const response = await axios.post('/api/initiate-payment', bookingDetails);
+      const { success, paymentUrl, error } = response.data;
 
-      // Save booking
-      await addDoc(collection(db, "bookings"), bookingDetails);
-      
-      const query = new URLSearchParams(bookingDetails as any).toString();
+      if (success && paymentUrl) {
+          router.push(paymentUrl);
+      } else {
+          throw new Error(error || 'Failed to initiate payment.');
+      }
 
-      toast({
-        title: "Payment Successful!",
-        description: "Your booking has been confirmed.",
-      });
-
-      router.push(`/booking-confirmation?${query}`);
-    } catch (error) {
-      console.error("Error creating booking:", error);
+    } catch (error: any) {
+      console.error("Error initiating payment:", error);
       toast({
         variant: "destructive",
-        title: "Booking Failed",
-        description: "Something went wrong. Please try again.",
+        title: "Payment Failed",
+        description: error.response?.data?.error || error.message || "Something went wrong. Please try again.",
       });
     } finally {
       setIsSubmitting(false);
@@ -353,7 +341,7 @@ export function BookingForm() {
           {isSubmitting ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Processing Payment...
+              Connecting to Payment Gateway...
             </>
           ) : (
             'Pay with Hubtel & Book Now'
