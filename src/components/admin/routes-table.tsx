@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -12,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PlusCircle, Loader2, Trash2, Pencil } from "lucide-react";
+import { PlusCircle, Loader2, Trash2, Pencil, ArrowRightLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -82,6 +83,21 @@ export default function RoutesTable() {
     } catch (error) {
         console.error("Error deleting route: ", error);
         toast({ variant: "destructive", title: "Error", description: "Failed to delete route." });
+    }
+  };
+
+  const handleSwap = async (route: Route) => {
+    try {
+      const routeDoc = doc(db, "routes", route.id);
+      await updateDoc(routeDoc, {
+        pickup: route.destination,
+        destination: route.pickup,
+      });
+      toast({ title: "Success", description: "Route swapped successfully." });
+      fetchRoutes(); // Refresh the list
+    } catch (error) {
+      console.error("Error swapping route: ", error);
+      toast({ variant: "destructive", title: "Error", description: "Failed to swap route." });
     }
   };
 
@@ -178,6 +194,9 @@ export default function RoutesTable() {
               <TableCell>{route.destination}</TableCell>
               <TableCell>{route.price.toFixed(2)}</TableCell>
               <TableCell className="text-right space-x-2">
+                 <Button variant="outline" size="icon" onClick={() => handleSwap(route)}>
+                  <ArrowRightLeft className="h-4 w-4" />
+                </Button>
                 <Button variant="outline" size="icon" onClick={() => handleEditClick(route)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
