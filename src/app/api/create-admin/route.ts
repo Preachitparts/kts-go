@@ -2,21 +2,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as admin from "firebase-admin";
 
-// Initialize Firebase Admin SDK
-// You must provide your service account credentials via environment variables
-// or a service account file.
-try {
+// Function to initialize Firebase Admin SDK
+function initializeFirebaseAdmin() {
     if (!admin.apps.length) {
-        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY as string);
-        admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount)
-        });
+        try {
+            const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY as string);
+            admin.initializeApp({
+                credential: admin.credential.cert(serviceAccount)
+            });
+        } catch (error) {
+            console.error("Firebase admin initialization error", error);
+        }
     }
-} catch (error) {
-    console.error("Firebase admin initialization error", error);
 }
 
 export async function POST(req: NextRequest) {
+    initializeFirebaseAdmin();
+
     if (!admin.apps.length) {
         return NextResponse.json({ error: 'Firebase Admin SDK not initialized.' }, { status: 500 });
     }
