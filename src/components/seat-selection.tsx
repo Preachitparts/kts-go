@@ -58,18 +58,37 @@ export default function SeatSelection({
 
   const renderSeats = () => {
     const seats = [];
-    const rows = Math.ceil(capacity / 4);
-    for (let i = 1; i <= capacity; i++) {
-        const seatNumber = `${i}`;
-        seats.push(
-            <Seat
-                key={seatNumber}
-                seatNumber={seatNumber}
-                isSelected={selectedSeats.includes(seatNumber)}
-                onSelect={toggleSeat}
-                isOccupied={false} // Add logic for occupied seats if available
-            />
+    // Using a 2-2 layout with an aisle
+    const seatsPerRow = 4;
+    const numRows = Math.ceil(capacity / seatsPerRow);
+
+    for (let row = 0; row < numRows; row++) {
+      const rowSeats = [];
+      for (let seat = 0; seat < seatsPerRow + 1; seat++) { // +1 for aisle
+        if (seat === 2) { // Aisle position
+          rowSeats.push(<div key={`aisle-${row}`} className="w-8"></div>);
+          continue;
+        }
+
+        const seatIndex = row * seatsPerRow + (seat > 2 ? seat - 1 : seat);
+        if (seatIndex >= capacity) continue;
+
+        const seatNumber = `${seatIndex + 1}`;
+        rowSeats.push(
+          <Seat
+            key={seatNumber}
+            seatNumber={seatNumber}
+            isSelected={selectedSeats.includes(seatNumber)}
+            onSelect={toggleSeat}
+            isOccupied={false} // Add logic for occupied seats if available
+          />
         );
+      }
+      seats.push(
+        <div key={`row-${row}`} className="flex justify-center gap-2">
+          {rowSeats}
+        </div>
+      );
     }
     return seats;
   };
@@ -79,32 +98,15 @@ export default function SeatSelection({
       <div className="flex flex-col items-center gap-4">
         {/* Driver's seat */}
         <div className="w-full flex justify-start pl-4 mb-4">
-           <div className="flex flex-col items-center p-2 rounded-lg bg-gray-200">
+           <div className="flex flex-col items-center p-2 rounded-lg bg-gray-200 w-fit">
                 <SteeringWheelIcon />
                 <span className="text-xs font-medium text-gray-700 mt-1">Driver</span>
            </div>
         </div>
         
         {/* Seats layout */}
-        <div className="grid grid-cols-5 gap-2 w-full justify-items-center">
-            {Array.from({ length: capacity }, (_, i) => {
-                const seatNumber = `${i + 1}`;
-                const rowItem = i % 4;
-                const isAisle = rowItem === 2;
-                if (isAisle) {
-                    return <div key={`aisle-${i}`} className="col-span-1"></div>
-                }
-
-                return (
-                    <Seat
-                        key={seatNumber}
-                        seatNumber={seatNumber}
-                        isSelected={selectedSeats.includes(seatNumber)}
-                        onSelect={toggleSeat}
-                        isOccupied={false} // Add logic for occupied seats
-                    />
-                );
-            })}
+        <div className="flex flex-col gap-2 w-full">
+            {renderSeats()}
         </div>
       </div>
     </div>
