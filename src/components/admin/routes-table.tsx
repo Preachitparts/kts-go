@@ -161,14 +161,19 @@ export default function RoutesTable() {
   const onSubmit = async (values: z.infer<typeof routeSchema>) => {
     setIsSubmitting(true);
     try {
-      const submissionValues = { ...values, busIds: values.busIds || [] };
+      const submissionValues = {
+        pickup: values.pickup,
+        destination: values.destination,
+        price: values.price,
+        status: values.status,
+        busIds: values.busIds || [],
+      };
+
       if (editingRoute) {
-        // Update existing route
         const routeDoc = doc(db, "routes", editingRoute.id);
         await updateDoc(routeDoc, submissionValues);
         toast({ title: "Success", description: "Route updated successfully." });
       } else {
-        // Add new route
         await addDoc(collection(db, "routes"), submissionValues);
         toast({ title: "Success", description: "Route added successfully." });
       }
