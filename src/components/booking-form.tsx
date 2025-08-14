@@ -68,7 +68,7 @@ export function BookingForm() {
         const routesSnapshot = await getDocs(routesCollection);
         const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
         setRoutes(routesList);
-      } catch (error) => {
+      } catch (error) {
         console.error("Error fetching routes: ", error);
         toast({ variant: "destructive", title: "Error", description: "Could not fetch routes." });
       }
