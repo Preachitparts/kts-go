@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -167,18 +168,26 @@ export default function UsersTable() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell>{user.id}</TableCell>
-                <TableCell>{user.name}</TableCell>
-                <TableCell>{user.email}</TableCell>
-                <TableCell>
-                  <Badge variant={user.role === 'Super-Admin' ? 'destructive' : user.role === 'Admin' ? 'default' : 'secondary'}>
-                      {user.role}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
+            {users.length > 0 ? (
+                users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell>{user.id}</TableCell>
+                    <TableCell>{user.name}</TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell>
+                      <Badge variant={user.role === 'Super-Admin' ? 'destructive' : user.role === 'Admin' ? 'default' : 'secondary'}>
+                          {user.role}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))
+            ) : (
+                <TableRow>
+                    <TableCell colSpan={4} className="text-center text-muted-foreground">
+                        No admin users found. Use the button above to add one.
+                    </TableCell>
+                </TableRow>
+            )}
           </TableBody>
         </Table>
     </>
