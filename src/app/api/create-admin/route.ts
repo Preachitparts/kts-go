@@ -6,7 +6,11 @@ import * as admin from "firebase-admin";
 function initializeFirebaseAdmin() {
     if (!admin.apps.length) {
         try {
-            const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY as string);
+            const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+            if (!serviceAccountString) {
+                throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set.");
+            }
+            const serviceAccount = JSON.parse(serviceAccountString);
             admin.initializeApp({
                 credential: admin.credential.cert(serviceAccount)
             });
