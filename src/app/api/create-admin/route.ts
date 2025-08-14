@@ -4,18 +4,22 @@ import * as admin from "firebase-admin";
 
 // Function to initialize Firebase Admin SDK
 function initializeFirebaseAdmin() {
+    // Check if the app is already initialized
     if (!admin.apps.length) {
         try {
             const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
             if (!serviceAccountString) {
-                throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set.");
+                // This error will be caught by the try-catch block
+                throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set or not accessible in this environment.");
             }
             const serviceAccount = JSON.parse(serviceAccountString);
             admin.initializeApp({
                 credential: admin.credential.cert(serviceAccount)
             });
-        } catch (error) {
-            console.error("Firebase admin initialization error", error);
+        } catch (error: any) {
+            // Log the detailed error for server-side debugging
+            console.error("Firebase admin initialization error:", error.message);
+            // Don't re-throw, let the check below handle the response
         }
     }
 }
@@ -23,8 +27,10 @@ function initializeFirebaseAdmin() {
 export async function POST(req: NextRequest) {
     initializeFirebaseAdmin();
 
+    // After attempting initialization, check again if it was successful.
     if (!admin.apps.length) {
-        return NextResponse.json({ error: 'Firebase Admin SDK not initialized.' }, { status: 500 });
+        // Provide a clear error response to the client
+        return NextResponse.json({ error: 'Firebase Admin SDK could not be initialized. Check server logs for details.' }, { status: 500 });
     }
 
     try {
@@ -55,6 +61,7 @@ export async function POST(req: NextRequest) {
         console.error('Error creating new admin:', error);
         
         let errorMessage = 'An internal server error occurred.';
+        // Provide more specific error messages based on Firebase Auth error codes
         if (error.code === 'auth/email-already-exists') {
             errorMessage = 'An account with this email already exists.';
         } else if (error.code === 'auth/invalid-password') {
