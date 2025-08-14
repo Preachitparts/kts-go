@@ -16,7 +16,7 @@ export default function BookingTicket() {
         pickup: searchParams.get('pickup') || 'N/A',
         destination: searchParams.get('destination') || 'N/A',
         date: searchParams.get('date') ? new Date(searchParams.get('date')!) : new Date(),
-        seats: searchParams.get('seats') || '0', // Now represents number of seats
+        seats: searchParams.get('seats') || 'N/A',
         emergencyContact: searchParams.get('emergencyContact') || 'N/A',
         totalAmount: Number(searchParams.get('totalAmount')) || 0,
         ticketNumber: searchParams.get('ticketNumber') || 'N/A',
@@ -26,6 +26,8 @@ export default function BookingTicket() {
     const handlePrint = () => {
         window.print();
     };
+    
+    const numberOfSeats = bookingDetails.seats.split(',').length;
 
     return (
         <Card className="w-full max-w-2xl mx-auto shadow-lg printable-area">
@@ -86,14 +88,14 @@ export default function BookingTicket() {
                             <Users className="size-5 mt-1 text-primary" />
                             <div>
                                 <p className="font-semibold">Number of Seats</p>
-                                <p className="text-muted-foreground">{bookingDetails.seats}</p>
+                                <p className="text-muted-foreground">{numberOfSeats}</p>
                             </div>
                         </div>
                          <div className="flex items-start gap-3">
                             <Armchair className="size-5 mt-1 text-primary" />
                             <div>
                                 <p className="font-semibold">Seat Numbers</p>
-                                <p className="text-muted-foreground">Assigned at terminal</p>
+                                <p className="text-muted-foreground">{bookingDetails.seats}</p>
                             </div>
                         </div>
                     </div>
@@ -143,4 +145,3 @@ export default function BookingTicket() {
     );
 }
 
-    
