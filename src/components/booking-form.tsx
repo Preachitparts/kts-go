@@ -8,7 +8,7 @@ import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import React from "react";
-import { collection, getDocs, query, where, doc, getDoc, documentId } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, writeBatch, Timestamp } from "firebase/firestore";
 import axios from "axios";
 
 import { Button } from "@/components/ui/button";
@@ -38,7 +38,6 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { db } from "@/lib/firebase";
 import SeatSelection from "./seat-selection";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 const bookingSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
@@ -55,6 +54,35 @@ type Route = { id: string; pickup: string; destination: string; price: number; s
 type Bus = { id: string; numberPlate: string; capacity: number; status: boolean; };
 type Referral = { id: string; name: string; phone: string; };
 
+async function releaseExpiredSeats() {
+    const fiveMinutesAgo = Timestamp.fromMillis(Date.now() - 5 * 60 * 1000);
+    const expiredBookingsQuery = query(
+        collection(db, "pending_bookings"),
+        where("createdAt", "<=", fiveMinutesAgo)
+    );
+
+    const snapshot = await getDocs(expiredBookingsQuery);
+    if (snapshot.empty) {
+        return;
+    }
+
+    const batch = writeBatch(db);
+    snapshot.forEach(docSnap => {
+        const bookingData = docSnap.data();
+        const rejectedBookingData = {
+            ...bookingData,
+            status: 'rejected',
+            rejectionReason: 'Payment timed out',
+        };
+        const rejectedDocRef = doc(collection(db, "rejected_bookings"));
+        batch.set(rejectedDocRef, rejectedBookingData);
+        batch.delete(docSnap.ref);
+    });
+
+    await batch.commit();
+    console.log(`Released seats for ${snapshot.size} expired bookings.`);
+}
+
 export function BookingForm() {
   const router = useRouter();
   const { toast } = useToast();
@@ -63,9 +91,11 @@ export function BookingForm() {
   const [routes, setRoutes] = React.useState<Route[]>([]);
   const [availableBuses, setAvailableBuses] = React.useState<Bus[]>([]);
   const [referrals, setReferrals] = React.useState<Referral[]>([]);
+  const [occupiedSeats, setOccupiedSeats] = React.useState<string[]>([]);
   const [loadingRoutes, setLoadingRoutes] = React.useState(true);
   const [loadingBuses, setLoadingBuses] = React.useState(false);
   const [loadingReferrals, setLoadingReferrals] = React.useState(true);
+  const [loadingSeats, setLoadingSeats] = React.useState(false);
 
   const form = useForm<z.infer<typeof bookingSchema>>({
     resolver: zodResolver(bookingSchema),
@@ -81,46 +111,39 @@ export function BookingForm() {
   });
   
   const selectedRouteId = form.watch("routeId");
+  const selectedBusId = form.watch("busId");
+  const selectedDate = form.watch("date");
   const selectedSeats = form.watch("selectedSeats");
 
-  // Fetch active routes on component mount
   React.useEffect(() => {
-    const fetchRoutes = async () => {
+    const fetchPrerequisites = async () => {
       setLoadingRoutes(true);
+      setLoadingReferrals(true);
       try {
         const routesQuery = query(collection(db, "routes"), where("status", "==", true));
-        const routesSnapshot = await getDocs(routesQuery);
+        const referralsQuery = collection(db, "referrals");
+        
+        const [routesSnapshot, referralsSnapshot] = await Promise.all([
+            getDocs(routesQuery),
+            getDocs(referralsQuery)
+        ]);
+
         const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
+        const referralsList = referralsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Referral));
+        
         setRoutes(routesList);
+        setReferrals(referralsList);
       } catch (error) {
-        console.error("Error fetching routes: ", error);
-        toast({ variant: "destructive", title: "Error", description: "Could not fetch available routes." });
+        console.error("Error fetching prerequisites: ", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not fetch available routes or referrals." });
       } finally {
         setLoadingRoutes(false);
+        setLoadingReferrals(false);
       }
     };
-    fetchRoutes();
+    fetchPrerequisites();
   }, [toast]);
   
-  // Fetch referrals on component mount
-  React.useEffect(() => {
-    const fetchReferrals = async () => {
-        setLoadingReferrals(true);
-        try {
-            const referralsSnapshot = await getDocs(collection(db, "referrals"));
-            const referralsList = referralsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Referral));
-            setReferrals(referralsList);
-        } catch (error) {
-            console.error("Error fetching referrals: ", error);
-            toast({ variant: "destructive", title: "Error", description: "Could not fetch referrals." });
-        } finally {
-            setLoadingReferrals(false);
-        }
-    };
-    fetchReferrals();
-  }, [toast]);
-
-  // Fetch assigned buses when a route is selected
   React.useEffect(() => {
     const fetchBusesForRoute = async () => {
       if (!selectedRouteId) {
@@ -128,15 +151,13 @@ export function BookingForm() {
         return;
       }
       setLoadingBuses(true);
-      form.setValue("busId", ""); // Reset bus selection
+      form.setValue("busId", "");
       try {
         const route = routes.find(r => r.id === selectedRouteId);
         if (route && route.busIds && route.busIds.length > 0) {
-            const busesQuery = query(collection(db, "buses"), where(documentId(), "in", route.busIds));
+            const busesQuery = query(collection(db, "buses"), where("__name__", "in", route.busIds), where("status", "==", true));
             const busesSnapshot = await getDocs(busesQuery);
-            const busesList = busesSnapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() } as Bus))
-                .filter(bus => bus.status === true); // Ensure the assigned bus is also active
+            const busesList = busesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bus));
             setAvailableBuses(busesList);
         } else {
              setAvailableBuses([]);
@@ -149,9 +170,53 @@ export function BookingForm() {
         setLoadingBuses(false);
       }
     };
-
     fetchBusesForRoute();
   }, [selectedRouteId, routes, toast, form]);
+
+  React.useEffect(() => {
+    const fetchOccupiedSeats = async () => {
+        if (!selectedBusId || !selectedDate) {
+            setOccupiedSeats([]);
+            return;
+        }
+        setLoadingSeats(true);
+        try {
+            await releaseExpiredSeats(); // Clean up expired seats before fetching
+
+            const bookingDate = format(selectedDate, 'yyyy-MM-dd');
+            
+            const paidQuery = query(collection(db, "bookings"),
+                where("busId", "==", selectedBusId),
+                where("date", ">=", `${bookingDate}T00:00:00.000Z`),
+                where("date", "<=", `${bookingDate}T23:59:59.999Z`)
+            );
+            const pendingQuery = query(collection(db, "pending_bookings"),
+                where("busId", "==", selectedBusId),
+                where("date", ">=", `${bookingDate}T00:00:00.000Z`),
+                where("date", "<=", `${bookingDate}T23:59:59.999Z`)
+            );
+
+            const [paidSnapshot, pendingSnapshot] = await Promise.all([
+                getDocs(paidQuery),
+                getDocs(pendingQuery),
+            ]);
+            
+            const paidSeats = paidSnapshot.docs.flatMap(doc => doc.data().seats || []);
+            const pendingSeats = pendingSnapshot.docs.flatMap(doc => doc.data().seats || []);
+            
+            setOccupiedSeats([...paidSeats, ...pendingSeats]);
+
+        } catch (error) {
+            console.error("Error fetching occupied seats:", error);
+            toast({ variant: "destructive", title: "Error", description: "Could not fetch seat availability." });
+        } finally {
+            setLoadingSeats(false);
+        }
+    };
+
+    fetchOccupiedSeats();
+  }, [selectedBusId, selectedDate, toast]);
+
 
   const selectedRoute = React.useMemo(() => {
     return routes.find(r => r.id === selectedRouteId);
@@ -179,7 +244,7 @@ export function BookingForm() {
         phone: values.phone,
         emergencyContact: values.emergencyContact,
         date: values.date.toISOString(),
-        seats: values.selectedSeats.join(", "),
+        seats: values.selectedSeats,
         pickup: selectedRoute.pickup,
         destination: selectedRoute.destination,
         busType: `${selectedBus.numberPlate} - ${selectedBus.capacity} Seater`,
@@ -190,7 +255,7 @@ export function BookingForm() {
       };
 
       const response = await axios.post('/api/initiate-payment', bookingDetails);
-      const { success, paymentUrl, error, clientReference } = response.data;
+      const { success, paymentUrl, error } = response.data;
 
       if (success && paymentUrl) {
           router.push(paymentUrl);
@@ -284,7 +349,10 @@ export function BookingForm() {
                     <Calendar
                         mode="single"
                         selected={field.value}
-                        onSelect={field.onChange}
+                        onSelect={(date) => {
+                            field.onChange(date);
+                            form.setValue("selectedSeats", []);
+                        }}
                         disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) || date > new Date(new Date().setMonth(new Date().getMonth() + 3))}
                         initialFocus
                     />
@@ -377,6 +445,8 @@ export function BookingForm() {
                             <SeatSelection
                                 capacity={selectedBus.capacity}
                                 selectedSeats={field.value}
+                                occupiedSeats={occupiedSeats}
+                                isLoading={loadingSeats}
                                 onSeatsChange={field.onChange}
                             />
                         </FormControl>

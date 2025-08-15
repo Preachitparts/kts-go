@@ -12,7 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, doc, writeBatch, query, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, doc, writeBatch, query, addDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { cn } from "@/lib/utils";
@@ -89,11 +89,23 @@ export default function PendingBookingsTab() {
     }
   };
 
-  const handleReject = async (bookingId: string) => {
-     if (!bookingId) return;
+  const handleReject = async (booking: any) => {
+     if (!booking) return;
      try {
-      await deleteDoc(doc(db, "pending_bookings", bookingId));
-      toast({ title: "Success", description: "Booking rejected and removed." });
+      const rejectedBookingData = { ...booking, status: 'rejected', rejectionReason: 'Manually rejected by admin' };
+      delete rejectedBookingData.id;
+      
+      const batch = writeBatch(db);
+
+      const rejectedDocRef = doc(collection(db, "rejected_bookings"));
+      batch.set(rejectedDocRef, rejectedBookingData);
+
+      const pendingDocRef = doc(db, "pending_bookings", booking.id);
+      batch.delete(pendingDocRef);
+
+      await batch.commit();
+
+      toast({ title: "Success", description: "Booking rejected and moved." });
       fetchBookings();
       setIsDialogOpen(false);
     } catch (error) {
@@ -218,7 +230,7 @@ export default function PendingBookingsTab() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Armchair className="h-4 w-4 text-muted-foreground" />
-                  <span>Seats: {selectedBooking.seats}</span>
+                  <span>Seats: {Array.isArray(selectedBooking.seats) ? selectedBooking.seats.join(', ') : selectedBooking.seats}</span>
                 </div>
                  <div className="flex items-center gap-2">
                   <Hash className="h-4 w-4 text-muted-foreground" />
@@ -232,7 +244,7 @@ export default function PendingBookingsTab() {
           )}
           <DialogFooter>
             <Button onClick={() => handleApprove(selectedBooking)}>Approve</Button>
-            <Button variant="destructive" onClick={() => handleReject(selectedBooking?.id)}>Reject</Button>
+            <Button variant="destructive" onClick={() => handleReject(selectedBooking)}>Reject</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

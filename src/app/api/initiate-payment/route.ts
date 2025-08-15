@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import axios from "axios";
 import { z } from "zod";
-import { collection, addDoc, query, where, getDocs, doc, getDoc } from "firebase/firestore";
+import { collection, addDoc, query, where, getDocs, doc, getDoc, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 const paymentSchema = z.object({
@@ -10,7 +10,7 @@ const paymentSchema = z.object({
   phone: z.string(),
   emergencyContact: z.string(),
   date: z.string().datetime(),
-  seats: z.string(),
+  seats: z.array(z.string()),
   pickup: z.string(),
   destination: z.string(),
   busType: z.string(),
@@ -61,10 +61,12 @@ export async function POST(req: NextRequest) {
 
         const pendingBookingData = {
             ...body,
+            seats: body.seats, // Store seats as an array
             referralId: referralId || null,
             ticketNumber,
             status: 'pending',
             clientReference,
+            createdAt: Timestamp.now(), // Add a creation timestamp
         };
 
         await addDoc(collection(db, "pending_bookings"), pendingBookingData);

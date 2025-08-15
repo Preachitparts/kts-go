@@ -4,10 +4,13 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
+import { Skeleton } from "./ui/skeleton";
 
 interface SeatSelectionProps {
   capacity: number;
   selectedSeats: string[];
+  occupiedSeats: string[];
+  isLoading: boolean;
   onSeatsChange: (seats: string[]) => void;
 }
 
@@ -33,7 +36,7 @@ const Seat = ({ seatNumber, isSelected, onSelect, isOccupied }: { seatNumber: st
       size="icon"
       className={cn(
         "h-8 w-8 text-xs font-semibold",
-        isOccupied && "cursor-not-allowed bg-red-300 text-white",
+        isOccupied && "cursor-not-allowed bg-red-300 text-white hover:bg-red-300",
         isSelected && "bg-primary text-primary-foreground"
       )}
       onClick={() => !isOccupied && onSelect(seatNumber)}
@@ -47,6 +50,8 @@ const Seat = ({ seatNumber, isSelected, onSelect, isOccupied }: { seatNumber: st
 export default function SeatSelection({
   capacity,
   selectedSeats,
+  occupiedSeats,
+  isLoading,
   onSeatsChange,
 }: SeatSelectionProps) {
   const toggleSeat = (seatNumber: string) => {
@@ -57,15 +62,26 @@ export default function SeatSelection({
   };
 
   const renderSeats = () => {
+    if (isLoading) {
+      return Array.from({ length: Math.ceil(capacity / 4) }).map((_, rowIndex) => (
+        <div key={`skeleton-row-${rowIndex}`} className="flex justify-center gap-2">
+            <Skeleton className="h-8 w-8" />
+            <Skeleton className="h-8 w-8" />
+            <div className="w-8"></div>
+            <Skeleton className="h-8 w-8" />
+            <Skeleton className="h-8 w-8" />
+        </div>
+      ));
+    }
+
     const seats = [];
-    // Using a 2-2 layout with an aisle
     const seatsPerRow = 4;
     const numRows = Math.ceil(capacity / seatsPerRow);
 
     for (let row = 0; row < numRows; row++) {
       const rowSeats = [];
-      for (let seat = 0; seat < seatsPerRow + 1; seat++) { // +1 for aisle
-        if (seat === 2) { // Aisle position
+      for (let seat = 0; seat < seatsPerRow + 1; seat++) {
+        if (seat === 2) {
           rowSeats.push(<div key={`aisle-${row}`} className="w-8"></div>);
           continue;
         }
@@ -80,7 +96,7 @@ export default function SeatSelection({
             seatNumber={seatNumber}
             isSelected={selectedSeats.includes(seatNumber)}
             onSelect={toggleSeat}
-            isOccupied={false} // Add logic for occupied seats if available
+            isOccupied={occupiedSeats.includes(seatNumber)}
           />
         );
       }
@@ -96,7 +112,6 @@ export default function SeatSelection({
   return (
     <div className="border rounded-lg p-4 bg-muted/20">
       <div className="flex flex-col items-center gap-4">
-        {/* Driver's seat */}
         <div className="w-full flex justify-start pl-4 mb-4">
            <div className="flex flex-col items-center p-2 rounded-lg bg-gray-200 w-fit">
                 <SteeringWheelIcon />
@@ -104,7 +119,6 @@ export default function SeatSelection({
            </div>
         </div>
         
-        {/* Seats layout */}
         <div className="flex flex-col gap-2 w-full">
             {renderSeats()}
         </div>
