@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
         const body = paymentSchema.parse(rawBody);
 
         let referralId = null;
-        if (body.referralCode) {
+        if (body.referralCode && body.referralCode !== "none") {
             const referralsQuery = query(collection(db, "referrals"), where("phone", "==", body.referralCode));
             const referralsSnapshot = await getDocs(referralsQuery);
             if (!referralsSnapshot.empty) {
