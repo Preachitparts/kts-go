@@ -3,37 +3,25 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // --- PUBLIC READS for Booking Form ---
-    match /routes/{routeId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-    match /buses/{busId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-    match /referrals/{referralId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-    
-    // --- PAYMENT FLOW PERMISSIONS ---
-    // Allow the server to read Hubtel settings for payment processing
-    match /settings/hubtel {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-    // Allow anyone to create a temporary booking document before payment
-    match /pending_bookings/{bookingId} {
-      allow create: if true;
-      // Other operations (read, delete) are handled by the server
+    // Helper function to check if a user is an authenticated admin
+    function isAdmin() {
+      return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['Admin', 'Super-Admin'];
     }
 
-    // --- ADMIN-ONLY ACCESS ---
-    // Secure all other collections (bookings, passengers, users, etc.)
+    // Admins can read and write all collections
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAdmin();
+    }
+
+    // Allow logged-in users to be read for user role checks in layouts
+    match /users/{userId} {
+      allow get: if request.auth != null;
+    }
+
+    // Allow server-side processes (like payment initiation) to read settings
+    // This is a more open rule but is safe as it's for a single, non-sensitive config document.
+    match /settings/hubtel {
+      allow get: if true;
     }
   }
 }
