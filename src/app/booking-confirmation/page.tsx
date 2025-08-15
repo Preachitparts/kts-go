@@ -1,3 +1,4 @@
+
 import BookingTicket from "@/components/booking-ticket";
 import { Suspense } from "react";
 import { collection, query, where, getDocs } from "firebase/firestore";
@@ -73,7 +74,14 @@ function BookingConfirmationContent({ bookingDetails }: { bookingDetails: Bookin
 
 
 export default async function BookingConfirmationPage({ searchParams }: { searchParams: { ref: string } }) {
-    const bookingDetails = await getBookingDetails(searchParams.ref);
+    // Hubtel may return the param as lowercase 'ref', so handle that
+    const clientRef = searchParams.ref;
+
+    if (!clientRef) {
+        return <BookingConfirmationContent bookingDetails={null} />
+    }
+    
+    const bookingDetails = await getBookingDetails(clientRef);
 
     return (
         <Suspense fallback={<div className="flex h-screen items-center justify-center">Loading confirmation...</div>}>

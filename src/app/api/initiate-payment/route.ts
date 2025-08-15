@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
             totalAmount: body.totalAmount,
             description: `KTS Go Bus Ticket: ${body.pickup} to ${body.destination}`,
             callbackUrl: `${appUrl}/api/payment-callback`,
-            returnUrl: `${appUrl}/booking-confirmation?ref=${clientReference}`,
+            returnUrl: `${appUrl}/booking-confirmation`,
             cancellationUrl: `${appUrl}/?error=payment_cancelled`,
             merchantAccountNumber: accountId,
             clientReference: clientReference,
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
         const { status, data } = hubtelResponse.data;
 
         if (status === 'Success' && data && data.checkoutUrl) {
-            return NextResponse.json({ success: true, paymentUrl: data.checkoutUrl });
+            return NextResponse.json({ success: true, paymentUrl: data.checkoutUrl, clientReference });
         } else {
             console.error("Hubtel Error:", hubtelResponse.data);
             const errorMessage = data?.message || 'Failed to create Hubtel invoice.';

@@ -190,7 +190,7 @@ export function BookingForm() {
       };
 
       const response = await axios.post('/api/initiate-payment', bookingDetails);
-      const { success, paymentUrl, error } = response.data;
+      const { success, paymentUrl, error, clientReference } = response.data;
 
       if (success && paymentUrl) {
           router.push(paymentUrl);

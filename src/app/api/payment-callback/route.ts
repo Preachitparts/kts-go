@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
 // This handles the user's browser redirection.
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
-    const clientReference = searchParams.get('ref');
+    const clientReference = searchParams.get('clientreference'); // Hubtel uses lowercase in returnUrl
 
     if (clientReference) {
         const confirmationUrl = new URL('/booking-confirmation', req.url);
