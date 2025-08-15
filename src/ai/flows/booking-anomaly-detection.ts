@@ -63,4 +63,3 @@ const detectBookingAnomalyFlow = ai.defineFlow(
     return output!;
   }
 );
-
