@@ -1,6 +1,5 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import axios from "axios";
 import { z } from "zod";
 import { collection, addDoc, query, where, getDocs, doc, getDoc, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -38,13 +37,13 @@ export async function POST(req: NextRequest) {
         const accountId = useLiveKeys ? hubtelConfig.accountId : hubtelConfig.testAccountId;
 
         if (!clientId || !secretKey || !accountId) {
-            throw new Error(`Hubtel API credentials for ${useLiveKeys ? 'live' : 'test'} mode are not fully configured.`);
+            return NextResponse.json({ success: false, error: `Hubtel API credentials for ${useLiveKeys ? 'live' : 'test'} mode are not fully configured.` }, { status: 500 });
         }
 
         const appUrl = process.env.APP_URL || `https://${req.headers.get('host')}`;
         if (!appUrl) {
             console.error("APP_URL is not set in environment variables and could not be inferred.");
-            throw new Error("Application URL is not configured.");
+             return NextResponse.json({ success: false, error: "Application URL is not configured." }, { status: 500 });
         }
 
         const rawBody = await req.json();
@@ -65,12 +64,11 @@ export async function POST(req: NextRequest) {
 
         const pendingBookingData = {
             ...body,
-            seats: body.seats, // Store seats as an array
             referralId: referralId || null,
             ticketNumber,
             status: 'pending',
             clientReference,
-            createdAt: Timestamp.now(), // Add a creation timestamp
+            createdAt: Timestamp.now(),
         };
 
         await addDoc(collection(db, "pending_bookings"), pendingBookingData);
@@ -86,34 +84,29 @@ export async function POST(req: NextRequest) {
         };
 
         const authString = Buffer.from(`${clientId}:${secretKey}`).toString('base64');
-
-        const hubtelResponse = await axios.post(
-            "https://payproxyapi.hubtel.com/items/initiate",
-            hubtelPayload,
-            {
-                headers: {
-                    'Authorization': `Basic ${authString}`,
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            }
-        );
         
-        const { status, data } = hubtelResponse.data;
+        const hubtelResponse = await fetch("https://payproxyapi.hubtel.com/items/initiate", {
+            method: 'POST',
+            headers: {
+                'Authorization': `Basic ${authString}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(hubtelPayload),
+        });
+        
+        const responseData = await hubtelResponse.json();
 
-        if (status === 'Success' && data && data.checkoutUrl) {
-            return NextResponse.json({ success: true, paymentUrl: data.checkoutUrl, clientReference });
+        if (hubtelResponse.ok && responseData.status === 'Success' && responseData.data?.checkoutUrl) {
+            return NextResponse.json({ success: true, paymentUrl: responseData.data.checkoutUrl, clientReference });
         } else {
-            console.error("Hubtel Error:", hubtelResponse.data);
-            const errorMessage = data?.message || 'Failed to create Hubtel invoice.';
+            console.error("Hubtel Error:", responseData);
+            const errorMessage = responseData.data?.message || responseData.message || 'Failed to create Hubtel invoice.';
             return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
         }
 
     } catch (error: any) {
-        console.error("Error initiating payment:", error.message);
-        if (error.response) {
-            console.error("Hubtel Response Error:", error.response.data);
-        }
+        console.error("Error initiating payment:", error);
         if (error instanceof z.ZodError) {
             return NextResponse.json({ success: false, error: "Invalid request data.", details: error.errors }, { status: 400 });
         }

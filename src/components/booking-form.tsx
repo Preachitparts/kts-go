@@ -8,8 +8,7 @@ import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import React from "react";
-import { collection, getDocs, query, where, doc, writeBatch, Timestamp } from "firebase/firestore";
-import axios from "axios";
+import { collection, getDocs, query, where, doc, writeBatch, Timestamp, addDoc } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -181,19 +180,20 @@ export function BookingForm() {
         }
         setLoadingSeats(true);
         try {
-            await releaseExpiredSeats(); // Clean up expired seats before fetching
+            await releaseExpiredSeats();
 
-            const bookingDate = format(selectedDate, 'yyyy-MM-dd');
+            const startOfDay = new Date(selectedDate.setHours(0, 0, 0, 0));
+            const endOfDay = new Date(selectedDate.setHours(23, 59, 59, 999));
             
             const paidQuery = query(collection(db, "bookings"),
                 where("busId", "==", selectedBusId),
-                where("date", ">=", `${bookingDate}T00:00:00.000Z`),
-                where("date", "<=", `${bookingDate}T23:59:59.999Z`)
+                where("date", ">=", Timestamp.fromDate(startOfDay)),
+                where("date", "<=", Timestamp.fromDate(endOfDay))
             );
             const pendingQuery = query(collection(db, "pending_bookings"),
                 where("busId", "==", selectedBusId),
-                where("date", ">=", `${bookingDate}T00:00:00.000Z`),
-                where("date", "<=", `${bookingDate}T23:59:59.999Z`)
+                where("date", ">=", Timestamp.fromDate(startOfDay)),
+                where("date", "<=", Timestamp.fromDate(endOfDay))
             );
 
             const [paidSnapshot, pendingSnapshot] = await Promise.all([
@@ -254,13 +254,18 @@ export function BookingForm() {
         referralCode: values.referralCode === "none" ? undefined : values.referralCode,
       };
 
-      const response = await axios.post('/api/initiate-payment', bookingDetails);
-      const { success, paymentUrl, error } = response.data;
+      const response = await fetch('/api/initiate-payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bookingDetails)
+      });
+      
+      const data = await response.json();
 
-      if (success && paymentUrl) {
-          router.push(paymentUrl);
+      if (response.ok && data.success && data.paymentUrl) {
+          router.push(data.paymentUrl);
       } else {
-          throw new Error(error || 'Failed to initiate payment.');
+          throw new Error(data.error || 'Failed to initiate payment.');
       }
 
     } catch (error: any) {
@@ -268,7 +273,7 @@ export function BookingForm() {
       toast({
         variant: "destructive",
         title: "Payment Failed",
-        description: error.response?.data?.error || error.message || "Something went wrong. Please try again.",
+        description: error.message || "Something went wrong. Please try again.",
       });
     } finally {
       setIsSubmitting(false);
@@ -350,8 +355,10 @@ export function BookingForm() {
                         mode="single"
                         selected={field.value}
                         onSelect={(date) => {
-                            field.onChange(date);
-                            form.setValue("selectedSeats", []);
+                            if (date) {
+                                field.onChange(date);
+                                form.setValue("selectedSeats", []);
+                            }
                         }}
                         disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) || date > new Date(new Date().setMonth(new Date().getMonth() + 3))}
                         initialFocus

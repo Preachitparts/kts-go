@@ -13,7 +13,9 @@ export default function BookingTicket({ bookingDetails }: { bookingDetails: Book
         window.print();
     };
     
-    const numberOfSeats = bookingDetails.seats.split(',').length;
+    const seatsArray = Array.isArray(bookingDetails.seats) ? bookingDetails.seats : (bookingDetails.seats || "").split(',');
+    const numberOfSeats = seatsArray.length;
+    const seatNumbers = seatsArray.join(', ');
 
     return (
         <Card className="w-full max-w-2xl mx-auto shadow-lg printable-area">
@@ -81,7 +83,7 @@ export default function BookingTicket({ bookingDetails }: { bookingDetails: Book
                             <Armchair className="size-5 mt-1 text-primary" />
                             <div>
                                 <p className="font-semibold">Seat Numbers</p>
-                                <p className="text-muted-foreground">{bookingDetails.seats}</p>
+                                <p className="text-muted-foreground">{seatNumbers}</p>
                             </div>
                         </div>
                     </div>

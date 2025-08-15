@@ -1,6 +1,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { doc, getDoc, updateDoc, collection, addDoc, setDoc, deleteDoc, query, where, getDocs } from "firebase/firestore";
+import { doc, collection, addDoc, setDoc, deleteDoc, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 export async function POST(req: NextRequest) {
@@ -23,15 +23,15 @@ export async function POST(req: NextRequest) {
         const pendingBookingsSnapshot = await getDocs(pendingBookingsQuery);
 
         if (pendingBookingsSnapshot.empty) {
-            console.error(`Callback Error: Pending booking not found for ClientReference: ${clientReference}`);
-            // It's possible the booking was already processed, so we return a success to Hubtel
-            return NextResponse.json({ message: "Booking not found or already processed" });
+            console.warn(`Callback Warning: Pending booking not found for ClientReference: ${clientReference}. It might have already been processed.`);
+            // Acknowledge receipt to Hubtel even if we can't find the booking
+            return NextResponse.json({ message: "Acknowledged: Booking not found or already processed." });
         }
         
         const pendingBookingDoc = pendingBookingsSnapshot.docs[0];
         const pendingBookingRef = pendingBookingDoc.ref;
         
-        if (Status === "Success" && ResponseCode === "0000" && Data.Status === "Success") {
+        if (Status === "Success" && ResponseCode === "0000") {
             const bookingDetails = pendingBookingDoc.data();
             
             // 1. Save passenger info
@@ -50,6 +50,9 @@ export async function POST(req: NextRequest) {
                 paymentStatus: Data.Status,
                 amountPaid: Data.Amount,
             };
+            // Remove fields that are not needed in the final booking
+            delete finalBookingData.createdAt; 
+            
             await addDoc(collection(db, "bookings"), finalBookingData);
 
             // 3. Delete the pending booking
@@ -59,6 +62,14 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ message: "Callback received and processed successfully." });
         } else {
             // Payment failed or was cancelled
+            const bookingDetails = pendingBookingDoc.data();
+            const rejectedBookingData = {
+                ...bookingDetails,
+                status: 'rejected',
+                rejectionReason: `Payment failed with Hubtel status: ${Status}`,
+            };
+            await addDoc(collection(db, "rejected_bookings"), rejectedBookingData);
+            
             await deleteDoc(pendingBookingRef);
             console.warn(`Payment failed or was cancelled for ClientReference: ${clientReference}. Status: ${Status}, ResponseCode: ${ResponseCode}`);
             return NextResponse.json({ message: "Payment was not successful. Booking cancelled." });
@@ -70,11 +81,9 @@ export async function POST(req: NextRequest) {
     }
 }
 
-// Hubtel might still use GET for redirects, though POST is for server-to-server callbacks.
-// This handles the user's browser redirection.
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
-    const clientReference = searchParams.get('clientreference'); // Hubtel uses lowercase in returnUrl
+    const clientReference = searchParams.get('clientreference');
 
     if (clientReference) {
         const confirmationUrl = new URL('/booking-confirmation', req.url);
@@ -82,7 +91,6 @@ export async function GET(req: NextRequest) {
         return NextResponse.redirect(confirmationUrl);
     }
 
-    // Handle cancellation or error
     const error = searchParams.get('error');
     const redirectUrl = new URL('/', req.url);
     if (error) {
