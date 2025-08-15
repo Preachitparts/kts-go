@@ -182,27 +182,25 @@ export function BookingForm() {
         try {
             await releaseExpiredSeats();
 
-            const startOfDay = new Date(selectedDate.setHours(0, 0, 0, 0));
-            const endOfDay = new Date(selectedDate.setHours(23, 59, 59, 999));
-            
-            const paidQuery = query(collection(db, "bookings"),
-                where("busId", "==", selectedBusId),
-                where("date", ">=", Timestamp.fromDate(startOfDay)),
-                where("date", "<=", Timestamp.fromDate(endOfDay))
-            );
-            const pendingQuery = query(collection(db, "pending_bookings"),
-                where("busId", "==", selectedBusId),
-                where("date", ">=", Timestamp.fromDate(startOfDay)),
-                where("date", "<=", Timestamp.fromDate(endOfDay))
-            );
+            const targetDate = format(selectedDate, "yyyy-MM-dd");
+
+            const paidQuery = query(collection(db, "bookings"), where("busId", "==", selectedBusId));
+            const pendingQuery = query(collection(db, "pending_bookings"), where("busId", "==", selectedBusId));
 
             const [paidSnapshot, pendingSnapshot] = await Promise.all([
                 getDocs(paidQuery),
                 getDocs(pendingQuery),
             ]);
             
-            const paidSeats = paidSnapshot.docs.flatMap(doc => doc.data().seats || []);
-            const pendingSeats = pendingSnapshot.docs.flatMap(doc => doc.data().seats || []);
+            const filterByDate = (doc: any) => {
+                const docDate = doc.data().date;
+                // doc.data().date is an ISO string, so we format it to compare
+                const docDateStr = format(new Date(docDate), "yyyy-MM-dd");
+                return docDateStr === targetDate;
+            };
+
+            const paidSeats = paidSnapshot.docs.filter(filterByDate).flatMap(doc => doc.data().seats || []);
+            const pendingSeats = pendingSnapshot.docs.filter(filterByDate).flatMap(doc => doc.data().seats || []);
             
             setOccupiedSeats([...paidSeats, ...pendingSeats]);
 
