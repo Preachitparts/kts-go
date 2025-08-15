@@ -76,7 +76,7 @@ export default function BookingsTable() {
             <TableCell>{booking.ticketNumber || 'N/A'}</TableCell>
             <TableCell>{booking.name}</TableCell>
             <TableCell>{`${booking.pickup} - ${booking.destination}`}</TableCell>
-            <TableCell>{new Date(booking.date).toLocaleDateString()}</TableCell>
+            <TableCell>{booking.date ? new Date(booking.date).toLocaleDateString() : 'N/A'}</TableCell>
             <TableCell>{booking.seats}</TableCell>
             <TableCell>{booking.totalAmount?.toFixed(2)}</TableCell>
             <TableCell>
