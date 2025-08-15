@@ -59,7 +59,14 @@ export default function SettingsPage() {
             try {
                 const settingsDoc = await getDoc(doc(db, "settings", "hubtel"));
                 if (settingsDoc.exists()) {
-                    form.reset(settingsDoc.data());
+                    const data = settingsDoc.data();
+                    // Ensure optional fields are at least empty strings to prevent uncontrolled->controlled error
+                    form.reset({
+                        ...data,
+                        testSecretKey: data.testSecretKey || "",
+                        testClientId: data.testClientId || "",
+                        testAccountId: data.testAccountId || "",
+                    });
                 }
             } catch (error) {
                 console.error("Error fetching settings:", error);
