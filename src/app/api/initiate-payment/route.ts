@@ -67,40 +67,44 @@ export async function POST(req: NextRequest) {
         const pendingBookingRef = await addDoc(collection(db, "pending_bookings"), pendingBookingData);
 
         const hubtelPayload = {
-            receiveName: "KTS Go",
-            description: `Bus ticket from ${body.pickup} to ${body.destination}`,
+            merchantAccountNumber: accountId,
+            totalAmount: body.totalAmount,
+            description: `Bus ticket: ${body.pickup} to ${body.destination}`,
+            callbackUrl: `${appUrl}/api/payment-callback?bookingId=${pendingBookingRef.id}`,
+            returnUrl: `${appUrl}/booking-confirmation`,
+            cancellationUrl: `${appUrl}/?error=payment_cancelled`,
+            clientReference: pendingBookingRef.id,
             customerName: body.name,
             customerMsisdn: body.phone.replace('+233', '233'),
-            customerEmail: "",
-            amount: body.totalAmount,
-            primaryCallbackUrl: `${appUrl}/api/payment-callback?bookingId=${pendingBookingRef.id}`,
-            secondaryCallbackUrl: `${appUrl}/api/payment-callback?bookingId=${pendingBookingRef.id}`,
-            clientReference: pendingBookingRef.id,
-            merchantAccountNumber: accountId
+            customerEmail: ""
         };
 
         const hubtelResponse = await axios.post(
-            "https://pay.hubtel.com/api/v2/invoice/create",
+            "https://payproxyapi.hubtel.com/items/initiate",
             hubtelPayload,
             {
-                auth: {
-                    username: clientId,
-                    password: secretKey
+                headers: {
+                    'Authorization': `Basic ${Buffer.from(`${clientId}:${secretKey}`).toString('base64')}`,
+                    'Content-Type': 'application/json'
                 }
             }
         );
-
+        
         const { status, data } = hubtelResponse.data;
 
-        if (status === 'Success') {
-            return NextResponse.json({ success: true, paymentUrl: data.paylinkUrl });
+        if (status === 'Success' && data && data.checkoutUrl) {
+            return NextResponse.json({ success: true, paymentUrl: data.checkoutUrl });
         } else {
             console.error("Hubtel Error:", hubtelResponse.data);
-            return NextResponse.json({ success: false, error: 'Failed to create Hubtel invoice.' }, { status: 500 });
+            const errorMessage = data?.errors?.[0]?.message || 'Failed to create Hubtel invoice.';
+            return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
         }
 
     } catch (error: any) {
         console.error("Error initiating payment:", error.message);
+        if (error.response) {
+            console.error("Hubtel Response Error:", error.response.data);
+        }
         if (error instanceof z.ZodError) {
             return NextResponse.json({ success: false, error: "Invalid request data.", details: error.errors }, { status: 400 });
         }
