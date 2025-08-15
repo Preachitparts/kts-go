@@ -20,11 +20,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
 
 const settingsSchema = z.object({
+    liveMode: z.boolean().default(true),
     secretKey: z.string().min(1, "Secret is required."),
     clientId: z.string().min(1, "Client ID is required."),
     accountId: z.string().min(1, "Account ID is required."),
+    testSecretKey: z.string().optional(),
+    testClientId: z.string().optional(),
+    testAccountId: z.string().optional(),
 });
 
 export default function SettingsPage() {
@@ -35,11 +41,17 @@ export default function SettingsPage() {
     const form = useForm<z.infer<typeof settingsSchema>>({
         resolver: zodResolver(settingsSchema),
         defaultValues: {
+            liveMode: true,
             secretKey: "",
             clientId: "",
             accountId: "",
+            testSecretKey: "",
+            testClientId: "",
+            testAccountId: "",
         },
     });
+
+    const liveMode = form.watch("liveMode");
 
     useEffect(() => {
         const fetchSettings = async () => {
@@ -112,43 +124,70 @@ export default function SettingsPage() {
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
                         <FormField
                             control={form.control}
-                            name="secretKey"
+                            name="liveMode"
                             render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Hubtel Payment Secret</FormLabel>
+                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                                    <div className="space-y-0.5">
+                                        <FormLabel className="text-base">Live Mode</FormLabel>
+                                        <FormMessage />
+                                    </div>
                                     <FormControl>
-                                        <Input type="password" {...field} />
+                                        <Switch
+                                            checked={field.value}
+                                            onCheckedChange={field.onChange}
+                                        />
                                     </FormControl>
-                                    <FormMessage />
                                 </FormItem>
                             )}
                         />
-                        <FormField
-                            control={form.control}
-                            name="clientId"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Hubtel Client ID</FormLabel>
-                                    <FormControl>
-                                        <Input {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="accountId"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Hubtel Account ID</FormLabel>
-                                    <FormControl>
-                                        <Input {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
+                        
+                        <Separator />
+                        
+                        <div>
+                            <h3 className="text-lg font-medium mb-4">{liveMode ? "Live API Keys" : "Test API Keys"}</h3>
+                            <div className="space-y-4">
+                                <FormField
+                                    control={form.control}
+                                    name={liveMode ? "secretKey" : "testSecretKey"}
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Hubtel Payment Secret</FormLabel>
+                                            <FormControl>
+                                                <Input type="password" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name={liveMode ? "clientId" : "testClientId"}
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Hubtel Client ID</FormLabel>
+                                            <FormControl>
+                                                <Input {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name={liveMode ? "accountId" : "testAccountId"}
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Hubtel Account ID</FormLabel>
+                                            <FormControl>
+                                                <Input {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+                        </div>
+
                         <Button type="submit" disabled={isLoading}>
                             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Save Changes

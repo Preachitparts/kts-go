@@ -31,10 +31,14 @@ async function getHubtelConfig() {
 export async function POST(req: NextRequest) {
     try {
         const hubtelConfig = await getHubtelConfig();
-        const { clientId, secretKey, accountId } = hubtelConfig;
+
+        const useLiveKeys = hubtelConfig.liveMode;
+        const clientId = useLiveKeys ? hubtelConfig.clientId : hubtelConfig.testClientId;
+        const secretKey = useLiveKeys ? hubtelConfig.secretKey : hubtelConfig.testSecretKey;
+        const accountId = useLiveKeys ? hubtelConfig.accountId : hubtelConfig.testAccountId;
 
         if (!clientId || !secretKey || !accountId) {
-            throw new Error("Hubtel API credentials are not fully configured.");
+            throw new Error(`Hubtel API credentials for ${useLiveKeys ? 'live' : 'test'} mode are not fully configured.`);
         }
 
         const appUrl = process.env.APP_URL || `https://${req.headers.get('host')}`;
