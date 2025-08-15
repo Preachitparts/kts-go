@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -10,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 export default function BookingsTable() {
@@ -20,10 +21,28 @@ export default function BookingsTable() {
   useEffect(() => {
     const fetchBookings = async () => {
       try {
-        const bookingsCollection = collection(db, "bookings");
-        const bookingsSnapshot = await getDocs(bookingsCollection);
-        const bookingsList = bookingsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setBookings(bookingsList);
+        const paidBookingsCollection = collection(db, "bookings");
+        const pendingBookingsCollection = collection(db, "pending_bookings");
+        
+        const [paidSnapshot, pendingSnapshot] = await Promise.all([
+            getDocs(paidBookingsCollection),
+            getDocs(pendingBookingsCollection)
+        ]);
+
+        const paidList = paidSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), status: 'Paid' }));
+        const pendingList = pendingSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), status: 'Pending' }));
+        
+        const combinedList = [...paidList, ...pendingList];
+
+        // Sort by date, descending
+        combinedList.sort((a, b) => {
+            const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date);
+            const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date);
+            return dateB.getTime() - dateA.getTime();
+        });
+
+
+        setBookings(combinedList);
       } catch (error) {
         console.error("Error fetching bookings: ", error);
       } finally {
@@ -54,15 +73,16 @@ export default function BookingsTable() {
       <TableBody>
         {bookings.map((booking) => (
           <TableRow key={booking.id}>
-            <TableCell>{booking.ticketNumber}</TableCell>
+            <TableCell>{booking.ticketNumber || 'N/A'}</TableCell>
             <TableCell>{booking.name}</TableCell>
             <TableCell>{`${booking.pickup} - ${booking.destination}`}</TableCell>
             <TableCell>{new Date(booking.date).toLocaleDateString()}</TableCell>
             <TableCell>{booking.seats}</TableCell>
             <TableCell>{booking.totalAmount?.toFixed(2)}</TableCell>
             <TableCell>
-                <Badge variant={'default'} className={'bg-green-500'}>
-                    Paid
+                <Badge variant={booking.status === 'Paid' ? 'default' : 'secondary'} 
+                       className={booking.status === 'Paid' ? 'bg-green-500' : 'bg-yellow-500'}>
+                    {booking.status}
                 </Badge>
             </TableCell>
           </TableRow>

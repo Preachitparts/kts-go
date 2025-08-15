@@ -9,29 +9,33 @@ import { format } from "date-fns";
 async function getDashboardData() {
   try {
     const bookingsCollection = collection(db, "bookings");
+    const pendingBookingsCollection = collection(db, "pending_bookings");
     const passengersCollection = collection(db, "passengers");
     const busesCollection = collection(db, "buses");
 
-    const [bookingsSnapshot, passengersSnapshot, busesSnapshot] = await Promise.all([
+    const [bookingsSnapshot, pendingBookingsSnapshot, passengersSnapshot, busesSnapshot] = await Promise.all([
       getDocs(bookingsCollection),
+      getDocs(pendingBookingsCollection),
       getDocs(passengersCollection),
       getDocs(busesCollection)
     ]);
 
-    const bookings = bookingsSnapshot.docs.map(doc => doc.data());
+    const paidBookings = bookingsSnapshot.docs.map(doc => doc.data());
 
-    const totalRevenue = bookings.reduce((sum, booking) => sum + (booking.totalAmount || 0), 0);
+    const totalRevenue = paidBookings.reduce((sum, booking) => sum + (booking.totalAmount || 0), 0);
     const totalPassengers = passengersSnapshot.size;
-    const totalBookings = bookingsSnapshot.size;
+    const totalBookings = bookingsSnapshot.size + pendingBookingsSnapshot.size;
 
-    const activeBusesQuery = query(busesCollection, where("status", "==", "Active"));
+    const activeBusesQuery = query(busesCollection, where("status", "==", true));
     const activeBusesSnapshot = await getDocs(activeBusesQuery);
     const activeBuses = activeBusesSnapshot.size;
 
     const monthlyRevenue: { [key: string]: number } = {};
-    bookings.forEach(booking => {
+    paidBookings.forEach(booking => {
         if (booking.date) {
-            const month = format(new Date(booking.date), "MMM");
+            // Ensure date is a string before creating a Date object from it
+            const bookingDate = typeof booking.date === 'string' ? new Date(booking.date) : booking.date.toDate();
+            const month = format(bookingDate, "MMM");
             monthlyRevenue[month] = (monthlyRevenue[month] || 0) + (booking.totalAmount || 0);
         }
     });
@@ -89,7 +93,7 @@ export default async function AdminDashboard() {
           <CardContent>
             <div className="text-2xl font-bold">GH₵ {totalRevenue.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">
-              Across all bookings
+              From completed bookings
             </p>
           </CardContent>
         </Card>
@@ -113,7 +117,7 @@ export default async function AdminDashboard() {
           <CardContent>
             <div className="text-2xl font-bold">+{totalBookings}</div>
             <p className="text-xs text-muted-foreground">
-              Total bookings made
+              Including pending and paid
             </p>
           </CardContent>
         </Card>
