@@ -37,6 +37,12 @@ export async function POST(req: NextRequest) {
             throw new Error("Hubtel API credentials are not fully configured.");
         }
 
+        const appUrl = process.env.APP_URL || `https://${req.headers.get('host')}`;
+        if (!appUrl) {
+            console.error("APP_URL is not set in environment variables and could not be inferred.");
+            throw new Error("Application URL is not configured.");
+        }
+
         const rawBody = await req.json();
         const body = paymentSchema.parse(rawBody);
 
@@ -50,42 +56,39 @@ export async function POST(req: NextRequest) {
         }
 
         const ticketNumber = `KTS${Date.now().toString().slice(-6)}`;
-        const appUrl = process.env.APP_URL;
-
-        if (!appUrl) {
-            console.error("APP_URL is not set in environment variables.");
-            throw new Error("Application URL is not configured.");
-        }
         
+        const clientReference = `KTSGO-${Date.now()}`;
+
         const pendingBookingData = {
             ...body,
             referralId: referralId || null,
             ticketNumber,
-            status: 'pending'
+            status: 'pending',
+            clientReference,
         };
 
-        const pendingBookingRef = await addDoc(collection(db, "pending_bookings"), pendingBookingData);
+        await addDoc(collection(db, "pending_bookings"), pendingBookingData);
 
         const hubtelPayload = {
-            merchantAccountNumber: accountId,
             totalAmount: body.totalAmount,
-            description: `Bus ticket: ${body.pickup} to ${body.destination}`,
-            callbackUrl: `${appUrl}/api/payment-callback?bookingId=${pendingBookingRef.id}`,
-            returnUrl: `${appUrl}/booking-confirmation`,
+            description: `KTS Go Bus Ticket: ${body.pickup} to ${body.destination}`,
+            callbackUrl: `${appUrl}/api/payment-callback`,
+            returnUrl: `${appUrl}/booking-confirmation?ref=${clientReference}`,
             cancellationUrl: `${appUrl}/?error=payment_cancelled`,
-            clientReference: pendingBookingRef.id,
-            customerName: body.name,
-            customerMsisdn: body.phone.replace('+233', '233'),
-            customerEmail: ""
+            merchantAccountNumber: accountId,
+            clientReference: clientReference,
         };
+
+        const authString = Buffer.from(`${clientId}:${secretKey}`).toString('base64');
 
         const hubtelResponse = await axios.post(
             "https://payproxyapi.hubtel.com/items/initiate",
             hubtelPayload,
             {
                 headers: {
-                    'Authorization': `Basic ${Buffer.from(`${clientId}:${secretKey}`).toString('base64')}`,
-                    'Content-Type': 'application/json'
+                    'Authorization': `Basic ${authString}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
                 }
             }
         );
@@ -96,7 +99,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: true, paymentUrl: data.checkoutUrl });
         } else {
             console.error("Hubtel Error:", hubtelResponse.data);
-            const errorMessage = data?.errors?.[0]?.message || 'Failed to create Hubtel invoice.';
+            const errorMessage = data?.message || 'Failed to create Hubtel invoice.';
             return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
         }
 

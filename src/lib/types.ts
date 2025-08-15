@@ -5,9 +5,10 @@ export type BookingDetails = {
   pickup: string;
   destination: string;
   date: Date;
-  seats: string[];
+  seats: string;
   busType: string;
   emergencyContact: string;
   totalAmount: number;
   ticketNumber: string;
+  clientReference: string;
 };

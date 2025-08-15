@@ -1,27 +1,13 @@
 
 "use client";
 
-import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Bus, User, Phone, MapPin, Calendar, Users, Shield, Download, Armchair } from "lucide-react";
 import { format } from 'date-fns';
+import type { BookingDetails } from "@/lib/types";
 
-export default function BookingTicket() {
-    const searchParams = useSearchParams();
-
-    const bookingDetails = {
-        name: searchParams.get('name') || 'N/A',
-        phone: searchParams.get('phone') || 'N/A',
-        pickup: searchParams.get('pickup') || 'N/A',
-        destination: searchParams.get('destination') || 'N/A',
-        date: searchParams.get('date') ? new Date(searchParams.get('date')!) : new Date(),
-        seats: searchParams.get('seats') || 'N/A',
-        emergencyContact: searchParams.get('emergencyContact') || 'N/A',
-        totalAmount: Number(searchParams.get('totalAmount')) || 0,
-        ticketNumber: searchParams.get('ticketNumber') || 'N/A',
-        busType: searchParams.get('busType') || 'N/A'
-    };
+export default function BookingTicket({ bookingDetails }: { bookingDetails: BookingDetails }) {
 
     const handlePrint = () => {
         window.print();
@@ -81,7 +67,7 @@ export default function BookingTicket() {
                             <Calendar className="size-5 mt-1 text-primary" />
                             <div>
                                 <p className="font-semibold">Departure Date</p>
-                                <p className="text-muted-foreground">{format(bookingDetails.date, 'PPP')}</p>
+                                <p className="text-muted-foreground">{format(new Date(bookingDetails.date), 'PPP')}</p>
                             </div>
                         </div>
                         <div className="flex items-start gap-3">
@@ -144,4 +130,3 @@ export default function BookingTicket() {
         </Card>
     );
 }
-
