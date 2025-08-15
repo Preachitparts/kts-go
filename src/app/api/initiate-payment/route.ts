@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import axios from "axios";
 import { z } from "zod";
-import { collection, addDoc, query, where, getDocs } from "firebase/firestore";
+import { collection, addDoc, query, where, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 const paymentSchema = z.object({
@@ -20,8 +20,23 @@ const paymentSchema = z.object({
   referralCode: z.string().optional(),
 });
 
+async function getHubtelConfig() {
+    const configDoc = await getDoc(doc(db, "settings", "hubtel"));
+    if (!configDoc.exists()) {
+        throw new Error("Hubtel settings are not configured in the admin panel.");
+    }
+    return configDoc.data();
+}
+
 export async function POST(req: NextRequest) {
     try {
+        const hubtelConfig = await getHubtelConfig();
+        const { clientId, secretKey, accountId } = hubtelConfig;
+
+        if (!clientId || !secretKey || !accountId) {
+            throw new Error("Hubtel API credentials are not fully configured.");
+        }
+
         const rawBody = await req.json();
         const body = paymentSchema.parse(rawBody);
 
@@ -38,17 +53,17 @@ export async function POST(req: NextRequest) {
         const appUrl = process.env.APP_URL;
 
         if (!appUrl) {
-            throw new Error("APP_URL is not set in environment variables.");
+            console.error("APP_URL is not set in environment variables.");
+            throw new Error("Application URL is not configured.");
         }
         
         const pendingBookingData = {
             ...body,
             referralId: referralId || null,
             ticketNumber,
-            status: 'pending' // Add a pending status
+            status: 'pending'
         };
 
-        // Save a pending booking document
         const pendingBookingRef = await addDoc(collection(db, "pending_bookings"), pendingBookingData);
 
         const hubtelPayload = {
@@ -61,7 +76,7 @@ export async function POST(req: NextRequest) {
             primaryCallbackUrl: `${appUrl}/api/payment-callback?bookingId=${pendingBookingRef.id}`,
             secondaryCallbackUrl: `${appUrl}/api/payment-callback?bookingId=${pendingBookingRef.id}`,
             clientReference: pendingBookingRef.id,
-            merchantAccountNumber: process.env.HUBTEL_ACCOUNT_ID
+            merchantAccountNumber: accountId
         };
 
         const hubtelResponse = await axios.post(
@@ -69,8 +84,8 @@ export async function POST(req: NextRequest) {
             hubtelPayload,
             {
                 auth: {
-                    username: process.env.HUBTEL_CLIENT_ID!,
-                    password: process.env.HUBTEL_SECRET_KEY!
+                    username: clientId,
+                    password: secretKey
                 }
             }
         );
@@ -85,7 +100,7 @@ export async function POST(req: NextRequest) {
         }
 
     } catch (error: any) {
-        console.error("Error initiating payment:", error);
+        console.error("Error initiating payment:", error.message);
         if (error instanceof z.ZodError) {
             return NextResponse.json({ success: false, error: "Invalid request data.", details: error.errors }, { status: 400 });
         }
