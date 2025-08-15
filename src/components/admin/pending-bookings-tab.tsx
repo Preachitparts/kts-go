@@ -12,7 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, doc, writeBatch, query, addDoc } from "firebase/firestore";
+import { collection, getDocs, doc, writeBatch, query, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { cn } from "@/lib/utils";
@@ -89,6 +89,44 @@ export default function PendingBookingsTab() {
     }
   };
 
+  const handleMarkAsPaid = async (booking: any) => {
+    if (!booking) return;
+    try {
+        const batch = writeBatch(db);
+
+        // 1. Save passenger info
+        const passengerRef = doc(db, "passengers", booking.phone);
+        batch.set(passengerRef, {
+            name: booking.name,
+            phone: booking.phone,
+            emergencyContact: booking.emergencyContact,
+        }, { merge: true });
+
+        // 2. Create the final booking
+        const finalBookingData = { 
+            ...booking, 
+            status: 'paid',
+            paymentMethod: 'Manual', // Add a note about manual payment
+        };
+        delete finalBookingData.id; // Remove the old doc id
+        const newBookingRef = doc(collection(db, "bookings"));
+        batch.set(newBookingRef, finalBookingData);
+
+        // 3. Delete the pending booking
+        const pendingDocRef = doc(db, "pending_bookings", booking.id);
+        batch.delete(pendingDocRef);
+        
+        await batch.commit();
+
+        toast({ title: "Success", description: "Booking marked as paid." });
+        fetchBookings();
+        setIsDialogOpen(false);
+    } catch (error) {
+        console.error("Error marking booking as paid: ", error);
+        toast({ variant: "destructive", title: "Error", description: "Failed to mark booking as paid." });
+    }
+  };
+
   const handleReject = async (booking: any) => {
      if (!booking) return;
      try {
@@ -123,8 +161,9 @@ export default function PendingBookingsTab() {
     return bookings.filter(booking => {
         const routeMatch = selectedRoute === 'all' || booking.routeId === selectedRoute;
         
-        const bookingDate = new Date(booking.date);
-        const dateMatch = !selectedDate || format(bookingDate, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
+        // Handle both string and Firestore Timestamp dates
+        const bookingDateObj = booking.date?.toDate ? booking.date.toDate() : new Date(booking.date);
+        const dateMatch = !selectedDate || format(bookingDateObj, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
         
         return routeMatch && dateMatch;
     });
@@ -181,7 +220,7 @@ export default function PendingBookingsTab() {
             <TableRow key={booking.id}>
               <TableCell>{booking.name}</TableCell>
               <TableCell>{`${booking.pickup} - ${booking.destination}`}</TableCell>
-              <TableCell>{format(new Date(booking.date), "PPP")}</TableCell>
+              <TableCell>{format(booking.date?.toDate ? booking.date.toDate() : new Date(booking.date), "PPP")}</TableCell>
               <TableCell>
                 <Badge variant="secondary" className="bg-yellow-500">Pending</Badge>
               </TableCell>
@@ -218,7 +257,7 @@ export default function PendingBookingsTab() {
                 </div>
                 <div className="flex items-center gap-2">
                   <CalendarIconAlt className="h-4 w-4 text-muted-foreground" />
-                  <span>{format(new Date(selectedBooking.date), "PPP")}</span>
+                  <span>{format(selectedBooking.date?.toDate ? selectedBooking.date.toDate() : new Date(selectedBooking.date), "PPP")}</span>
                 </div>
                  <div className="flex items-center gap-2 col-span-2">
                   <Ticket className="h-4 w-4 text-muted-foreground" />
@@ -242,9 +281,12 @@ export default function PendingBookingsTab() {
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button onClick={() => handleApprove(selectedBooking)}>Approve</Button>
+          <DialogFooter className="sm:justify-between">
             <Button variant="destructive" onClick={() => handleReject(selectedBooking)}>Reject</Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => handleApprove(selectedBooking)}>Approve</Button>
+              <Button onClick={() => handleMarkAsPaid(selectedBooking)}>Mark as Paid</Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
