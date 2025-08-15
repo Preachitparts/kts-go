@@ -62,10 +62,17 @@ export default function PaidBookingsTab() {
   const filteredBookings = useMemo(() => {
     return bookings.filter(booking => {
         const routeMatch = selectedRoute === 'all' || booking.routeId === selectedRoute;
-        const dateMatch = !selectedDate || format(booking.date.toDate(), 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
+        const bookingDate = booking.date?.toDate ? booking.date.toDate() : new Date(booking.date);
+        const dateMatch = !selectedDate || format(bookingDate, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
         return routeMatch && dateMatch;
     });
   }, [bookings, selectedRoute, selectedDate]);
+
+  const formatDate = (date: any) => {
+    if (!date) return 'N/A';
+    const dateObj = date.toDate ? date.toDate() : new Date(date);
+    return format(dateObj, "PPP");
+  };
 
   if (loading) {
     return <div>Loading bookings...</div>;
@@ -120,7 +127,7 @@ export default function PaidBookingsTab() {
                 <TableCell>{booking.ticketNumber}</TableCell>
                 <TableCell>{booking.name}</TableCell>
                 <TableCell>{`${booking.pickup} - ${booking.destination}`}</TableCell>
-                <TableCell>{format(booking.date.toDate(), "PPP")}</TableCell>
+                <TableCell>{formatDate(booking.date)}</TableCell>
                 <TableCell>{booking.totalAmount.toFixed(2)}</TableCell>
                 <TableCell>
                     <Badge className="bg-green-500">Paid</Badge>

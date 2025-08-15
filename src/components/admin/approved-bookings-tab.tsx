@@ -122,13 +122,17 @@ export default function ApprovedBookingsTab() {
   const filteredBookings = useMemo(() => {
     return bookings.filter(booking => {
         const routeMatch = selectedRoute === 'all' || booking.routeId === selectedRoute;
-        
-        const bookingDate = new Date(booking.date);
+        const bookingDate = booking.date?.toDate ? booking.date.toDate() : new Date(booking.date);
         const dateMatch = !selectedDate || format(bookingDate, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
-        
         return routeMatch && dateMatch;
     });
   }, [bookings, selectedRoute, selectedDate]);
+  
+  const formatDate = (date: any) => {
+    if (!date) return 'N/A';
+    const dateObj = date.toDate ? date.toDate() : new Date(date);
+    return format(dateObj, "PPP");
+  };
 
   if (loading) {
     return <div>Loading bookings...</div>;
@@ -181,7 +185,7 @@ export default function ApprovedBookingsTab() {
             <TableRow key={booking.id}>
               <TableCell>{booking.name}</TableCell>
               <TableCell>{`${booking.pickup} - ${booking.destination}`}</TableCell>
-              <TableCell>{format(new Date(booking.date), "PPP")}</TableCell>
+              <TableCell>{formatDate(booking.date)}</TableCell>
               <TableCell>
                 <Badge className="bg-blue-500">Approved</Badge>
               </TableCell>
@@ -218,7 +222,7 @@ export default function ApprovedBookingsTab() {
                 </div>
                 <div className="flex items-center gap-2">
                   <CalendarIconAlt className="h-4 w-4 text-muted-foreground" />
-                  <span>{format(new Date(selectedBooking.date), "PPP")}</span>
+                  <span>{formatDate(selectedBooking.date)}</span>
                 </div>
                  <div className="flex items-center gap-2 col-span-2">
                   <Ticket className="h-4 w-4 text-muted-foreground" />
