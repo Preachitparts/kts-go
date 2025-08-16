@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Calendar as CalendarIcon, PlusCircle, Loader2, Trash2, Pencil, MoreHorizontal, Eye } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, Timestamp, query, where, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Controller, useForm } from "react-hook-form";
@@ -48,6 +48,9 @@ type Session = {
   routeName?: string;
   busName?: string;
 };
+
+type GroupedSessions = { [date: string]: Session[] };
+
 
 export default function SessionsTable() {
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -114,6 +117,17 @@ export default function SessionsTable() {
   useEffect(() => {
     fetchAllData();
   }, []);
+
+  const groupedSessions = useMemo(() => {
+    return sessions.reduce((acc, session) => {
+        const dateKey = session.createdAt ? format(session.createdAt.toDate(), "PPP") : 'No Date';
+        if (!acc[dateKey]) {
+            acc[dateKey] = [];
+        }
+        acc[dateKey].push(session);
+        return acc;
+    }, {} as GroupedSessions);
+  }, [sessions]);
 
   const handleEditClick = (session: Session) => {
     toast({ title: "Info", description: "Editing sessions is disabled in this view. Please delete and recreate if needed." });
@@ -337,7 +351,6 @@ export default function SessionsTable() {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Created On</TableHead>
             <TableHead>Departure Date</TableHead>
             <TableHead>Route</TableHead>
             <TableHead>Bus</TableHead>
@@ -346,70 +359,79 @@ export default function SessionsTable() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sessions.map((session) => (
-            <TableRow key={session.id}>
-              <TableCell>{session.createdAt ? format(session.createdAt.toDate(), "PP") : 'N/A'}</TableCell>
-              <TableCell>{format(session.departureDate.toDate(), "PPP")}</TableCell>
-              <TableCell>{session.routeName}</TableCell>
-              <TableCell>{session.busName}</TableCell>
-              <TableCell>
-                  <Badge variant={
-                      session.departureDate.toDate() > new Date() ? 'default' : 'secondary'
-                  } className={
-                      session.departureDate.toDate() > new Date() ? 'bg-blue-500' : 'bg-gray-500'
-                  }>
-                      {session.departureDate.toDate() > new Date() ? 'Upcoming' : 'Completed'}
-                  </Badge>
-              </TableCell>
-              <TableCell className="text-right">
-                <AlertDialog>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <span className="sr-only">Open menu</span>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => handleViewClick(session)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          <span>View Details</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleEditClick(session)} disabled>
-                          <Pencil className="mr-2 h-4 w-4" />
-                          <span>Edit</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <AlertDialogTrigger asChild>
-                          <DropdownMenuItem className="text-red-600">
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            <span>Delete</span>
-                          </DropdownMenuItem>
-                        </AlertDialogTrigger>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                This action cannot be undone. This will permanently delete the session.
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(session.id)}>
-                                Delete
-                            </AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
-              </TableCell>
-            </TableRow>
-          ))}
-           {sessions.length === 0 && (
+          {Object.keys(groupedSessions).length > 0 ? (
+            Object.entries(groupedSessions).map(([date, sessionsInGroup]) => (
+                <React.Fragment key={date}>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                        <TableCell colSpan={5} className="font-semibold text-muted-foreground">
+                            Created on: {date}
+                        </TableCell>
+                    </TableRow>
+                    {sessionsInGroup.map((session) => (
+                        <TableRow key={session.id}>
+                            <TableCell>{format(session.departureDate.toDate(), "PPP")}</TableCell>
+                            <TableCell>{session.routeName}</TableCell>
+                            <TableCell>{session.busName}</TableCell>
+                            <TableCell>
+                                <Badge variant={
+                                    session.departureDate.toDate() > new Date() ? 'default' : 'secondary'
+                                } className={
+                                    session.departureDate.toDate() > new Date() ? 'bg-blue-500' : 'bg-gray-500'
+                                }>
+                                    {session.departureDate.toDate() > new Date() ? 'Upcoming' : 'Completed'}
+                                </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                                <AlertDialog>
+                                    <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" className="h-8 w-8 p-0">
+                                        <span className="sr-only">Open menu</span>
+                                        <MoreHorizontal className="h-4 w-4" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                        <DropdownMenuItem onClick={() => handleViewClick(session)}>
+                                        <Eye className="mr-2 h-4 w-4" />
+                                        <span>View Details</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleEditClick(session)} disabled>
+                                        <Pencil className="mr-2 h-4 w-4" />
+                                        <span>Edit</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <AlertDialogTrigger asChild>
+                                        <DropdownMenuItem className="text-red-600">
+                                            <Trash2 className="mr-2 h-4 w-4" />
+                                            <span>Delete</span>
+                                        </DropdownMenuItem>
+                                        </AlertDialogTrigger>
+                                    </DropdownMenuContent>
+                                    </DropdownMenu>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                This action cannot be undone. This will permanently delete the session.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                            <AlertDialogAction onClick={() => handleDelete(session.id)}>
+                                                Delete
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            </TableCell>
+                        </TableRow>
+                    ))}
+                </React.Fragment>
+            ))
+           ) : (
               <TableRow>
-                <TableCell colSpan={6} className="text-center">
+                <TableCell colSpan={5} className="text-center">
                   No sessions found.
                 </TableCell>
               </TableRow>
@@ -464,5 +486,3 @@ export default function SessionsTable() {
     </>
   );
 }
-
-    
