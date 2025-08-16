@@ -283,7 +283,7 @@ export default function RoutesTable() {
                             name="regionId"
                             control={form.control}
                             render={({ field }) => (
-                                <Select onValueChange={field.onChange} value={field.value} defaultValue={editingRoute?.regionId || ""}>
+                                <Select onValueChange={field.onChange} value={field.value}>
                                     <SelectTrigger className="col-span-3">
                                         <SelectValue placeholder="Select a region" />
                                     </SelectTrigger>
@@ -317,7 +317,7 @@ export default function RoutesTable() {
                         <Switch
                             id="status"
                             checked={form.watch("status")}
-                            onCheckedChange={(checked) => form.setValue("status", checked)}
+                            onCheckedChange={(checked) => form.setValue("status", checked, { shouldDirty: true })}
                         />
                     </div>
 
@@ -336,11 +336,14 @@ export default function RoutesTable() {
                                                 checked={field.value?.includes(bus.id)}
                                                 onCheckedChange={(checked) => {
                                                     const currentBusIds = field.value || [];
+                                                    let newBusIds;
                                                     if (checked) {
-                                                        field.onChange([...currentBusIds, bus.id]);
+                                                        newBusIds = [...currentBusIds, bus.id];
                                                     } else {
-                                                        field.onChange(currentBusIds.filter((id) => id !== bus.id));
+                                                        newBusIds = currentBusIds.filter((id) => id !== bus.id);
                                                     }
+                                                    field.onChange(newBusIds);
+                                                    form.setValue("busIds", newBusIds, { shouldDirty: true });
                                                 }}
                                             />
                                             <label htmlFor={bus.id} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
@@ -356,7 +359,7 @@ export default function RoutesTable() {
                     </div>
 
                   <DialogFooter>
-                    <Button type="submit" disabled={isSubmitting}>
+                    <Button type="submit" disabled={isSubmitting || !form.formState.isDirty}>
                       {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                       {editingRoute ? "Save Changes" : "Add Route"}
                     </Button>
