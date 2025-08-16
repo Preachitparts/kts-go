@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Calendar as CalendarIcon, PlusCircle, Loader2, Trash2, Pencil, MoreHorizontal, Eye } from "lucide-react";
+import { Calendar as CalendarIcon, PlusCircle, Loader2, Trash2, Pencil, MoreHorizontal, Eye, ChevronDown, ChevronRight } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, Timestamp, query, where, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -31,6 +31,7 @@ import { ScrollArea } from "../ui/scroll-area";
 import { Checkbox } from "../ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Input } from "../ui/input";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 
 const sessionSchema = z.object({
@@ -53,7 +54,7 @@ type Session = {
   busName?: string;
 };
 
-type GroupedSessions = { [date: string]: Session[] };
+type GroupedSessions = { [name: string]: Session[] };
 
 
 export default function SessionsTable() {
@@ -126,11 +127,11 @@ export default function SessionsTable() {
 
   const groupedSessions = useMemo(() => {
     return sessions.reduce((acc, session) => {
-        const dateKey = session.createdAt ? format(session.createdAt.toDate(), "PPP") : 'No Date';
-        if (!acc[dateKey]) {
-            acc[dateKey] = [];
+        const nameKey = session.name || 'Untitled Session';
+        if (!acc[nameKey]) {
+            acc[nameKey] = [];
         }
-        acc[dateKey].push(session);
+        acc[nameKey].push(session);
         return acc;
     }, {} as GroupedSessions);
   }, [sessions]);
@@ -423,110 +424,155 @@ export default function SessionsTable() {
           </DialogContent>
         </Dialog>
       </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-[50px]">
-              <Checkbox
-                  checked={selectedSessions.length === sessions.length && sessions.length > 0}
-                  onCheckedChange={(checked) => handleSelectAll(!!checked)}
-              />
-            </TableHead>
-            <TableHead>Session Name</TableHead>
-            <TableHead>Departure Date</TableHead>
-            <TableHead>Route</TableHead>
-            <TableHead>Bus</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {Object.keys(groupedSessions).length > 0 ? (
-            Object.entries(groupedSessions).map(([date, sessionsInGroup]) => (
-                <React.Fragment key={date}>
-                    <TableRow className="bg-muted/50 hover:bg-muted/50">
-                        <TableCell colSpan={7} className="font-semibold text-muted-foreground">
-                            Created on: {date}
-                        </TableCell>
-                    </TableRow>
-                    {sessionsInGroup.map((session) => (
-                        <TableRow key={session.id}>
-                            <TableCell>
-                                <Checkbox
-                                    checked={selectedSessions.includes(session.id)}
-                                    onCheckedChange={(checked) => handleSelectSingle(session.id, !!checked)}
-                                />
-                            </TableCell>
-                            <TableCell>{session.name}</TableCell>
-                            <TableCell>{format(session.departureDate.toDate(), "PPP")}</TableCell>
-                            <TableCell>{session.routeName}</TableCell>
-                            <TableCell>{session.busName}</TableCell>
-                            <TableCell>
-                                <Badge variant={
-                                    session.departureDate.toDate() > new Date() ? 'default' : 'secondary'
-                                } className={
-                                    session.departureDate.toDate() > new Date() ? 'bg-blue-500' : 'bg-gray-500'
-                                }>
-                                    {session.departureDate.toDate() > new Date() ? 'Upcoming' : 'Completed'}
-                                </Badge>
-                            </TableCell>
-                            <TableCell className="text-right">
-                                <AlertDialog>
-                                    <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" className="h-8 w-8 p-0">
-                                        <span className="sr-only">Open menu</span>
-                                        <MoreHorizontal className="h-4 w-4" />
+       <div className="border rounded-md">
+        <Table>
+            <TableHeader>
+            <TableRow>
+                <TableHead className="w-[50px]">
+                <Checkbox
+                    checked={selectedSessions.length === sessions.length && sessions.length > 0}
+                    onCheckedChange={(checked) => handleSelectAll(!!checked)}
+                />
+                </TableHead>
+                <TableHead>Session Name</TableHead>
+                <TableHead>Total Trips</TableHead>
+                <TableHead>Created On</TableHead>
+                <TableHead className="w-[50px]"></TableHead>
+            </TableRow>
+            </TableHeader>
+            <TableBody>
+            {Object.keys(groupedSessions).length > 0 ? (
+                Object.entries(groupedSessions).map(([name, sessionsInGroup]) => (
+                    <Collapsible asChild key={name}>
+                        <>
+                            <TableRow className="bg-muted/20 hover:bg-muted/50">
+                                <TableCell>
+                                    <Checkbox
+                                        checked={sessionsInGroup.every(s => selectedSessions.includes(s.id))}
+                                        onCheckedChange={(checked) => {
+                                            const groupIds = sessionsInGroup.map(s => s.id);
+                                            if (checked) {
+                                                setSelectedSessions(prev => [...new Set([...prev, ...groupIds])]);
+                                            } else {
+                                                setSelectedSessions(prev => prev.filter(id => !groupIds.includes(id)));
+                                            }
+                                        }}
+                                    />
+                                </TableCell>
+                                <TableCell className="font-semibold">{name}</TableCell>
+                                <TableCell>
+                                    <Badge variant="secondary">{sessionsInGroup.length}</Badge>
+                                </TableCell>
+                                <TableCell>{format(sessionsInGroup[0].createdAt.toDate(), "PPP")}</TableCell>
+                                <TableCell>
+                                    <CollapsibleTrigger asChild>
+                                        <Button variant="ghost" size="icon">
+                                            <ChevronDown className="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                                         </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                        <DropdownMenuItem onClick={() => handleViewClick(session)}>
-                                        <Eye className="mr-2 h-4 w-4" />
-                                        <span>View Details</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => handleEditClick(session)} disabled>
-                                        <Pencil className="mr-2 h-4 w-4" />
-                                        <span>Edit</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                        <AlertDialogTrigger asChild>
-                                        <DropdownMenuItem className="text-red-600">
-                                            <Trash2 className="mr-2 h-4 w-4" />
-                                            <span>Delete</span>
-                                        </DropdownMenuItem>
-                                        </AlertDialogTrigger>
-                                    </DropdownMenuContent>
-                                    </DropdownMenu>
-                                    <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                            <AlertDialogDescription>
-                                                This action cannot be undone. This will permanently delete the session.
-                                            </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                            <AlertDialogAction onClick={() => handleDelete(session.id)}>
-                                                Delete
-                                            </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                </AlertDialog>
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                </React.Fragment>
-            ))
-           ) : (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center">
-                  No sessions found.
+                                    </CollapsibleTrigger>
+                                </TableCell>
+                            </TableRow>
+                            <CollapsibleContent asChild>
+                                <TableRow>
+                                    <TableCell colSpan={5} className="p-0">
+                                        <div className="p-4 bg-muted/40">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead className="w-[50px]"></TableHead>
+                                                        <TableHead>Departure Date</TableHead>
+                                                        <TableHead>Route</TableHead>
+                                                        <TableHead>Bus</TableHead>
+                                                        <TableHead>Status</TableHead>
+                                                        <TableHead className="text-right">Actions</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {sessionsInGroup.map((session) => (
+                                                    <TableRow key={session.id}>
+                                                        <TableCell>
+                                                            <Checkbox
+                                                                checked={selectedSessions.includes(session.id)}
+                                                                onCheckedChange={(checked) => handleSelectSingle(session.id, !!checked)}
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell>{format(session.departureDate.toDate(), "PPP")}</TableCell>
+                                                        <TableCell>{session.routeName}</TableCell>
+                                                        <TableCell>{session.busName}</TableCell>
+                                                        <TableCell>
+                                                            <Badge variant={
+                                                                session.departureDate.toDate() > new Date() ? 'default' : 'secondary'
+                                                            } className={
+                                                                session.departureDate.toDate() > new Date() ? 'bg-blue-500' : 'bg-gray-500'
+                                                            }>
+                                                                {session.departureDate.toDate() > new Date() ? 'Upcoming' : 'Completed'}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            <AlertDialog>
+                                                                <DropdownMenu>
+                                                                <DropdownMenuTrigger asChild>
+                                                                    <Button variant="ghost" className="h-8 w-8 p-0">
+                                                                    <span className="sr-only">Open menu</span>
+                                                                    <MoreHorizontal className="h-4 w-4" />
+                                                                    </Button>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent align="end">
+                                                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                                    <DropdownMenuItem onClick={() => handleViewClick(session)}>
+                                                                    <Eye className="mr-2 h-4 w-4" />
+                                                                    <span>View Details</span>
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={() => handleEditClick(session)} disabled>
+                                                                    <Pencil className="mr-2 h-4 w-4" />
+                                                                    <span>Edit</span>
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuSeparator />
+                                                                    <AlertDialogTrigger asChild>
+                                                                    <DropdownMenuItem className="text-red-600">
+                                                                        <Trash2 className="mr-2 h-4 w-4" />
+                                                                        <span>Delete</span>
+                                                                    </DropdownMenuItem>
+                                                                    </AlertDialogTrigger>
+                                                                </DropdownMenuContent>
+                                                                </DropdownMenu>
+                                                                <AlertDialogContent>
+                                                                    <AlertDialogHeader>
+                                                                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                                        <AlertDialogDescription>
+                                                                            This action cannot be undone. This will permanently delete the session.
+                                                                        </AlertDialogDescription>
+                                                                    </AlertDialogHeader>
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                        <AlertDialogAction onClick={() => handleDelete(session.id)}>
+                                                                            Delete
+                                                                        </AlertDialogAction>
+                                                                    </AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            </CollapsibleContent>
+                        </>
+                    </Collapsible>
+                ))
+            ) : (
+                <TableRow>
+                <TableCell colSpan={5} className="text-center">
+                    No sessions found.
                 </TableCell>
-              </TableRow>
+                </TableRow>
             )}
-        </TableBody>
-      </Table>
+            </TableBody>
+        </Table>
+      </div>
       
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
         <DialogContent>
@@ -579,3 +625,5 @@ export default function SessionsTable() {
     </>
   );
 }
+
+    
