@@ -30,9 +30,11 @@ import { cn } from "@/lib/utils";
 import { ScrollArea } from "../ui/scroll-area";
 import { Checkbox } from "../ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../ui/dropdown-menu";
+import { Input } from "../ui/input";
 
 
 const sessionSchema = z.object({
+  name: z.string().min(3, "Session name must be at least 3 characters."),
   routeIds: z.array(z.string()).min(1, "Please select at least one route."),
   busIds: z.array(z.string()).min(1, "Please select at least one bus."),
   departureDates: z.array(z.date()).min(1, "Please select at least one departure date.").max(10, "You can select up to 10 dates at a time."),
@@ -42,6 +44,7 @@ type Route = { id: string; pickup: string; destination: string; price: number };
 type Bus = { id: string; numberPlate: string; capacity: number; status: boolean; };
 type Session = { 
   id: string; 
+  name: string;
   routeId: string; 
   busId: string; 
   departureDate: Timestamp; 
@@ -69,6 +72,7 @@ export default function SessionsTable() {
   const form = useForm<z.infer<typeof sessionSchema>>({
     resolver: zodResolver(sessionSchema),
     defaultValues: {
+      name: "",
       routeIds: [],
       busIds: [],
       departureDates: [],
@@ -198,6 +202,7 @@ export default function SessionsTable() {
                 values.departureDates.forEach(date => {
                     const newSessionRef = doc(collection(db, "sessions"));
                     batch.set(newSessionRef, {
+                        name: values.name,
                         routeId,
                         busId,
                         departureDate: Timestamp.fromDate(date),
@@ -227,7 +232,7 @@ export default function SessionsTable() {
   };
 
   const openNewSessionDialog = () => {
-    form.reset({ routeIds: [], busIds: [], departureDates: [] });
+    form.reset({ name: "", routeIds: [], busIds: [], departureDates: [] });
     setIsDialogOpen(true);
   };
 
@@ -278,6 +283,13 @@ export default function SessionsTable() {
             </DialogHeader>
             <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4">
                 
+                 {/* Session Name */}
+                 <div className="space-y-2">
+                    <Label htmlFor="name">Session Name</Label>
+                    <Input id="name" {...form.register("name")} placeholder="e.g. Easter Promo" />
+                    {form.formState.errors.name && <p className="text-red-500 text-xs">{form.formState.errors.name.message}</p>}
+                </div>
+
                 {/* Route Selection */}
                 <div className="space-y-2">
                     <Label>Routes</Label>
@@ -420,6 +432,7 @@ export default function SessionsTable() {
                   onCheckedChange={(checked) => handleSelectAll(!!checked)}
               />
             </TableHead>
+            <TableHead>Session Name</TableHead>
             <TableHead>Departure Date</TableHead>
             <TableHead>Route</TableHead>
             <TableHead>Bus</TableHead>
@@ -432,7 +445,7 @@ export default function SessionsTable() {
             Object.entries(groupedSessions).map(([date, sessionsInGroup]) => (
                 <React.Fragment key={date}>
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
-                        <TableCell colSpan={6} className="font-semibold text-muted-foreground">
+                        <TableCell colSpan={7} className="font-semibold text-muted-foreground">
                             Created on: {date}
                         </TableCell>
                     </TableRow>
@@ -444,6 +457,7 @@ export default function SessionsTable() {
                                     onCheckedChange={(checked) => handleSelectSingle(session.id, !!checked)}
                                 />
                             </TableCell>
+                            <TableCell>{session.name}</TableCell>
                             <TableCell>{format(session.departureDate.toDate(), "PPP")}</TableCell>
                             <TableCell>{session.routeName}</TableCell>
                             <TableCell>{session.busName}</TableCell>
@@ -506,7 +520,7 @@ export default function SessionsTable() {
             ))
            ) : (
               <TableRow>
-                <TableCell colSpan={6} className="text-center">
+                <TableCell colSpan={7} className="text-center">
                   No sessions found.
                 </TableCell>
               </TableRow>
@@ -524,6 +538,10 @@ export default function SessionsTable() {
             </DialogHeader>
             {viewingSession && (
                 <div className="grid gap-4 py-4 text-sm">
+                    <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+                        <Label className="text-right text-muted-foreground">Session Name</Label>
+                        <span>{viewingSession.name}</span>
+                    </div>
                     <div className="grid grid-cols-[120px_1fr] items-center gap-4">
                         <Label className="text-right text-muted-foreground">Route</Label>
                         <span>{viewingSession.routeName}</span>
