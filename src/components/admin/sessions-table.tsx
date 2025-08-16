@@ -12,14 +12,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Calendar as CalendarIcon, PlusCircle, Loader2, Trash2, Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, Timestamp, query, where } from "firebase/firestore";
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, Timestamp, query, where, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
@@ -27,12 +26,14 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from "../ui/label";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { ScrollArea } from "../ui/scroll-area";
+import { Checkbox } from "../ui/checkbox";
 
 
 const sessionSchema = z.object({
-  routeId: z.string().min(1, "Please select a route."),
-  busId: z.string().min(1, "Please select a bus."),
-  departureDate: z.date({ required_error: "Departure date is required." }),
+  routeIds: z.array(z.string()).min(1, "Please select at least one route."),
+  busIds: z.array(z.string()).min(1, "Please select at least one bus."),
+  departureDates: z.array(z.date()).min(1, "Please select at least one departure date.").max(10, "You can select up to 10 dates at a time."),
 });
 
 type Route = { id: string; pickup: string; destination: string; price: number };
@@ -58,6 +59,11 @@ export default function SessionsTable() {
 
   const form = useForm<z.infer<typeof sessionSchema>>({
     resolver: zodResolver(sessionSchema),
+    defaultValues: {
+      routeIds: [],
+      busIds: [],
+      departureDates: [],
+    }
   });
 
   const fetchAllData = async () => {
@@ -106,13 +112,11 @@ export default function SessionsTable() {
   }, []);
 
   const handleEditClick = (session: Session) => {
-    setEditingSession(session);
-    form.reset({
-      routeId: session.routeId,
-      busId: session.busId,
-      departureDate: session.departureDate.toDate(),
-    });
-    setIsDialogOpen(true);
+    // Editing a single session remains a singular action.
+    // We can't use the bulk form for editing one item.
+    // For now, let's disable editing from this new UI to avoid complexity.
+    // A proper implementation would need a separate, single-edit form.
+    toast({ title: "Info", description: "Editing sessions is disabled in this view. Please delete and recreate if needed." });
   };
   
   const handleDelete = async (sessionId: string) => {
@@ -129,25 +133,36 @@ export default function SessionsTable() {
   const onSubmit = async (values: z.infer<typeof sessionSchema>) => {
     setIsSubmitting(true);
     try {
-      const sessionData = {
-          ...values,
-          departureDate: Timestamp.fromDate(values.departureDate),
-      };
-      if (editingSession) {
-        const sessionDoc = doc(db, "sessions", editingSession.id);
-        await updateDoc(sessionDoc, sessionData);
-        toast({ title: "Success", description: "Session updated successfully." });
-      } else {
-        await addDoc(collection(db, "sessions"), sessionData);
-        toast({ title: "Success", description: "Session created successfully." });
-      }
-      fetchAllData();
-      setIsDialogOpen(false);
-      setEditingSession(null);
-      form.reset();
+        const batch = writeBatch(db);
+        let sessionCount = 0;
+
+        values.routeIds.forEach(routeId => {
+            values.busIds.forEach(busId => {
+                values.departureDates.forEach(date => {
+                    const newSessionRef = doc(collection(db, "sessions"));
+                    batch.set(newSessionRef, {
+                        routeId,
+                        busId,
+                        departureDate: Timestamp.fromDate(date),
+                    });
+                    sessionCount++;
+                });
+            });
+        });
+        
+        await batch.commit();
+
+        toast({ 
+            title: "Success", 
+            description: `${sessionCount} session(s) created successfully.` 
+        });
+      
+        fetchAllData();
+        setIsDialogOpen(false);
+        form.reset();
     } catch (error) {
-      console.error("Error saving session: ", error);
-      toast({ variant: "destructive", title: "Error", description: "Could not save session." });
+      console.error("Error saving sessions: ", error);
+      toast({ variant: "destructive", title: "Error", description: "Could not save sessions." });
     } finally {
       setIsSubmitting(false);
     }
@@ -155,7 +170,7 @@ export default function SessionsTable() {
 
   const openNewSessionDialog = () => {
     setEditingSession(null);
-    form.reset();
+    form.reset({ routeIds: [], busIds: [], departureDates: [] });
     setIsDialogOpen(true);
   };
 
@@ -169,76 +184,145 @@ export default function SessionsTable() {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={openNewSessionDialog}>
-              <PlusCircle className="mr-2 h-4 w-4" /> Create Session
+              <PlusCircle className="mr-2 h-4 w-4" /> Create Session(s)
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>{editingSession ? "Edit Session" : "Create New Session"}</DialogTitle>
+              <DialogTitle>Create New Session(s)</DialogTitle>
               <DialogDescription>
-                {editingSession ? "Update the details for this session." : "Create a new journey session for booking."}
+                Select routes, buses, and dates to create sessions in bulk.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="routeId" className="text-right">Route</Label>
-                    <Select onValueChange={(value) => form.setValue('routeId', value)} defaultValue={form.getValues("routeId")}>
-                        <SelectTrigger className="col-span-3">
-                            <SelectValue placeholder="Select a route" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {routes.map(route => (
-                                <SelectItem key={route.id} value={route.id}>{`${route.pickup} - ${route.destination}`}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                     {form.formState.errors.routeId && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.routeId.message}</p>}
+                
+                {/* Route Selection */}
+                <div className="space-y-2">
+                    <Label>Routes</Label>
+                    <Controller
+                        name="routeIds"
+                        control={form.control}
+                        render={({ field }) => (
+                            <ScrollArea className="h-32 w-full rounded-md border p-2">
+                                <div className="flex items-center space-x-2 pb-2 border-b mb-2">
+                                    <Checkbox
+                                        id="selectAllRoutes"
+                                        checked={field.value.length === routes.length}
+                                        onCheckedChange={(checked) => {
+                                            field.onChange(checked ? routes.map(r => r.id) : []);
+                                        }}
+                                    />
+                                    <Label htmlFor="selectAllRoutes" className="font-bold">Select All Routes</Label>
+                                </div>
+                                {routes.map(route => (
+                                    <div key={route.id} className="flex items-center space-x-2 p-1">
+                                        <Checkbox
+                                            id={`route-${route.id}`}
+                                            checked={field.value.includes(route.id)}
+                                            onCheckedChange={(checked) => {
+                                                const newValue = checked 
+                                                    ? [...field.value, route.id] 
+                                                    : field.value.filter(id => id !== route.id);
+                                                field.onChange(newValue);
+                                            }}
+                                        />
+                                        <Label htmlFor={`route-${route.id}`}>{`${route.pickup} - ${route.destination}`}</Label>
+                                    </div>
+                                ))}
+                            </ScrollArea>
+                        )}
+                    />
+                    {form.formState.errors.routeIds && <p className="text-red-500 text-xs">{form.formState.errors.routeIds.message}</p>}
                 </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="busId" className="text-right">Bus</Label>
-                    <Select onValueChange={(value) => form.setValue('busId', value)} defaultValue={form.getValues("busId")}>
-                        <SelectTrigger className="col-span-3">
-                            <SelectValue placeholder="Select a bus" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {buses.map(bus => (
-                                 <SelectItem key={bus.id} value={bus.id}>{`${bus.numberPlate} (${bus.capacity} seats)`}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    {form.formState.errors.busId && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.busId.message}</p>}
+
+                {/* Bus Selection */}
+                <div className="space-y-2">
+                    <Label>Buses</Label>
+                    <Controller
+                        name="busIds"
+                        control={form.control}
+                        render={({ field }) => (
+                            <ScrollArea className="h-32 w-full rounded-md border p-2">
+                                <div className="flex items-center space-x-2 pb-2 border-b mb-2">
+                                    <Checkbox
+                                        id="selectAllBuses"
+                                        checked={field.value.length === buses.length}
+                                        onCheckedChange={(checked) => {
+                                            field.onChange(checked ? buses.map(b => b.id) : []);
+                                        }}
+                                    />
+                                    <Label htmlFor="selectAllBuses" className="font-bold">Select All Buses</Label>
+                                </div>
+                                {buses.map(bus => (
+                                    <div key={bus.id} className="flex items-center space-x-2 p-1">
+                                        <Checkbox
+                                            id={`bus-${bus.id}`}
+                                            checked={field.value.includes(bus.id)}
+                                            onCheckedChange={(checked) => {
+                                                const newValue = checked 
+                                                    ? [...field.value, bus.id] 
+                                                    : field.value.filter(id => id !== bus.id);
+                                                field.onChange(newValue);
+                                            }}
+                                        />
+                                        <Label htmlFor={`bus-${bus.id}`}>{`${bus.numberPlate} (${bus.capacity} seats)`}</Label>
+                                    </div>
+                                ))}
+                            </ScrollArea>
+                        )}
+                    />
+                    {form.formState.errors.busIds && <p className="text-red-500 text-xs">{form.formState.errors.busIds.message}</p>}
                 </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                    <Label className="text-right">Date</Label>
-                     <Popover>
-                        <PopoverTrigger asChild>
+
+                {/* Date Selection */}
+                 <div className="space-y-2">
+                    <Label>Departure Dates (up to 10)</Label>
+                    <Controller
+                      name="departureDates"
+                      control={form.control}
+                      render={({ field }) => (
+                        <Popover>
+                          <PopoverTrigger asChild>
                             <Button
-                            variant={"outline"}
-                            className={cn(
-                                "col-span-3 justify-start text-left font-normal",
-                                !form.watch("departureDate") && "text-muted-foreground"
-                            )}
+                              variant={"outline"}
+                              className={cn(
+                                "w-full justify-start text-left font-normal h-auto",
+                                !field.value?.length && "text-muted-foreground"
+                              )}
                             >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {form.watch("departureDate") ? format(form.watch("departureDate"), "PPP") : <span>Pick a date</span>}
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {field.value?.length ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {field.value.map(date => (
+                                    <Badge key={date.toString()} variant="secondary">{format(date, "MMM d")}</Badge>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span>Pick date(s)</span>
+                              )}
                             </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
                             <Calendar
-                                mode="single"
-                                selected={form.watch("departureDate")}
-                                onSelect={(date) => form.setValue('departureDate', date as Date)}
-                                disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
-                                initialFocus
+                              mode="multiple"
+                              selected={field.value}
+                              onSelect={field.onChange}
+                              disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                              initialFocus
+                              max={10}
                             />
-                        </PopoverContent>
-                    </Popover>
-                    {form.formState.errors.departureDate && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.departureDate.message}</p>}
+                          </PopoverContent>
+                        </Popover>
+                      )}
+                    />
+                    {form.formState.errors.departureDates && <p className="text-red-500 text-xs">{form.formState.errors.departureDates.message}</p>}
                 </div>
+
+
                 <DialogFooter>
                     <Button type="submit" disabled={isSubmitting}>
                         {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {editingSession ? "Save Changes" : "Create Session"}
+                        Create Session(s)
                     </Button>
                 </DialogFooter>
             </form>
@@ -271,7 +355,7 @@ export default function SessionsTable() {
                   </Badge>
               </TableCell>
               <TableCell className="text-right space-x-2">
-                <Button variant="outline" size="icon" onClick={() => handleEditClick(session)}>
+                <Button variant="outline" size="icon" onClick={() => handleEditClick(session)} disabled>
                   <Pencil className="h-4 w-4" />
                 </Button>
                 <AlertDialog>
@@ -298,6 +382,13 @@ export default function SessionsTable() {
               </TableCell>
             </TableRow>
           ))}
+           {sessions.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center">
+                  No sessions found.
+                </TableCell>
+              </TableRow>
+            )}
         </TableBody>
       </Table>
     </>
