@@ -14,8 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PlusCircle, Loader2, Trash2, Pencil, ArrowRightLeft, CheckCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { PlusCircle, Loader2, Trash2, Pencil, ArrowRightLeft, CheckCircle, Search } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, writeBatch, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Controller, useForm } from "react-hook-form";
@@ -52,6 +52,8 @@ export default function RoutesTable() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRoute, setEditingRoute] = useState<Route | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedRegion, setSelectedRegion] = useState("all");
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof routeSchema>>({
@@ -108,6 +110,16 @@ export default function RoutesTable() {
   useEffect(() => {
     fetchPrerequisites();
   }, []);
+
+  const filteredRoutes = useMemo(() => {
+    return routes.filter(route => {
+        const searchMatch = searchTerm === "" ||
+            route.pickup.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            route.destination.toLowerCase().includes(searchTerm.toLowerCase());
+        const regionMatch = selectedRegion === 'all' || route.regionId === selectedRegion;
+        return searchMatch && regionMatch;
+    });
+  }, [routes, searchTerm, selectedRegion]);
 
   const handleEditClick = (route: Route) => {
     setEditingRoute(route);
@@ -223,111 +235,136 @@ export default function RoutesTable() {
 
   return (
     <>
-      <div className="flex justify-end gap-2 mb-4">
-        <Button variant="outline" onClick={handleActivateAll}>
-            <CheckCircle className="mr-2 h-4 w-4" /> Activate All
-        </Button>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openNewRouteDialog}>
-              <PlusCircle className="mr-2 h-4 w-4" /> Add Route
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4">
+        <div className="flex gap-4 w-full sm:w-auto">
+            <div className="relative w-full sm:w-64">
+                <Input
+                    placeholder="Search route..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+            </div>
+            <Select value={selectedRegion} onValueChange={setSelectedRegion}>
+                <SelectTrigger className="w-full sm:w-48">
+                    <SelectValue placeholder="Filter by region" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">All Regions</SelectItem>
+                    {regions.map(region => (
+                        <SelectItem key={region.id} value={region.id}>{region.name}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </div>
+        <div className="flex justify-end gap-2 w-full sm:w-auto">
+            <Button variant="outline" onClick={handleActivateAll}>
+                <CheckCircle className="mr-2 h-4 w-4" /> Activate All
             </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>{editingRoute ? "Edit Route" : "Add New Route"}</DialogTitle>
-              <DialogDescription>
-                {editingRoute ? "Update the details for this route." : "Add a new route and fare to the system."}
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="regionId" className="text-right">Region</Label>
-                    <Controller
-                        name="regionId"
-                        control={form.control}
-                        render={({ field }) => (
-                            <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger className="col-span-3">
-                                    <SelectValue placeholder="Select a region" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {regions.map(region => (
-                                        <SelectItem key={region.id} value={region.id}>{region.name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        )}
-                    />
-                    {form.formState.errors.regionId && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.regionId.message}</p>}
-                </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="pickup" className="text-right">Pickup</Label>
-                <Input id="pickup" {...form.register("pickup")} className="col-span-3" />
-                {form.formState.errors.pickup && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.pickup.message}</p>}
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="destination" className="text-right">Destination</Label>
-                <Input id="destination" {...form.register("destination")} className="col-span-3" />
-                 {form.formState.errors.destination && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.destination.message}</p>}
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="price" className="text-right">Price (GH₵)</Label>
-                <Input id="price" type="number" step="0.01" {...form.register("price")} className="col-span-3" />
-                 {form.formState.errors.price && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.price.message}</p>}
-              </div>
-               <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="status" className="text-right">Active</Label>
-                    <Switch
-                        id="status"
-                        checked={form.watch("status")}
-                        onCheckedChange={(checked) => form.setValue("status", checked)}
-                    />
-                </div>
-
-                <div>
-                  <Label>Assign Buses (Optional)</Label>
-                  <ScrollArea className="h-40 w-full rounded-md border p-4 mt-2">
-                    <Controller
-                        name="busIds"
-                        control={form.control}
-                        render={({ field }) => (
-                            <div className="space-y-2">
-                                {buses.map((bus) => (
-                                    <div key={bus.id} className="flex items-center space-x-2">
-                                        <Checkbox
-                                            id={bus.id}
-                                            checked={field.value?.includes(bus.id)}
-                                            onCheckedChange={(checked) => {
-                                                const currentBusIds = field.value || [];
-                                                if (checked) {
-                                                    field.onChange([...currentBusIds, bus.id]);
-                                                } else {
-                                                    field.onChange(currentBusIds.filter((id) => id !== bus.id));
-                                                }
-                                            }}
-                                        />
-                                        <label htmlFor={bus.id} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                            {bus.numberPlate} ({bus.capacity} Seater)
-                                        </label>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    />
-                  </ScrollArea>
-                   {form.formState.errors.busIds && <p className="text-red-500 text-xs mt-1">{form.formState.errors.busIds.message}</p>}
-                </div>
-
-              <DialogFooter>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {editingRoute ? "Save Changes" : "Add Route"}
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={openNewRouteDialog}>
+                  <PlusCircle className="mr-2 h-4 w-4" /> Add Route
                 </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>{editingRoute ? "Edit Route" : "Add New Route"}</DialogTitle>
+                  <DialogDescription>
+                    {editingRoute ? "Update the details for this route." : "Add a new route and fare to the system."}
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="regionId" className="text-right">Region</Label>
+                        <Controller
+                            name="regionId"
+                            control={form.control}
+                            defaultValue={editingRoute?.regionId || ""}
+                            render={({ field }) => (
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <SelectTrigger className="col-span-3">
+                                        <SelectValue placeholder="Select a region" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {regions.map(region => (
+                                            <SelectItem key={region.id} value={region.id}>{region.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                        />
+                        {form.formState.errors.regionId && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.regionId.message}</p>}
+                    </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="pickup" className="text-right">Pickup</Label>
+                    <Input id="pickup" {...form.register("pickup")} className="col-span-3" />
+                    {form.formState.errors.pickup && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.pickup.message}</p>}
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="destination" className="text-right">Destination</Label>
+                    <Input id="destination" {...form.register("destination")} className="col-span-3" />
+                     {form.formState.errors.destination && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.destination.message}</p>}
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="price" className="text-right">Price (GH₵)</Label>
+                    <Input id="price" type="number" step="0.01" {...form.register("price")} className="col-span-3" />
+                     {form.formState.errors.price && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.price.message}</p>}
+                  </div>
+                   <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="status" className="text-right">Active</Label>
+                        <Switch
+                            id="status"
+                            checked={form.watch("status")}
+                            onCheckedChange={(checked) => form.setValue("status", checked)}
+                        />
+                    </div>
+
+                    <div>
+                      <Label>Assign Buses (Optional)</Label>
+                      <ScrollArea className="h-40 w-full rounded-md border p-4 mt-2">
+                        <Controller
+                            name="busIds"
+                            control={form.control}
+                            render={({ field }) => (
+                                <div className="space-y-2">
+                                    {buses.map((bus) => (
+                                        <div key={bus.id} className="flex items-center space-x-2">
+                                            <Checkbox
+                                                id={bus.id}
+                                                checked={field.value?.includes(bus.id)}
+                                                onCheckedChange={(checked) => {
+                                                    const currentBusIds = field.value || [];
+                                                    if (checked) {
+                                                        field.onChange([...currentBusIds, bus.id]);
+                                                    } else {
+                                                        field.onChange(currentBusIds.filter((id) => id !== bus.id));
+                                                    }
+                                                }}
+                                            />
+                                            <label htmlFor={bus.id} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                                {bus.numberPlate} ({bus.capacity} Seater)
+                                            </label>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        />
+                      </ScrollArea>
+                       {form.formState.errors.busIds && <p className="text-red-500 text-xs mt-1">{form.formState.errors.busIds.message}</p>}
+                    </div>
+
+                  <DialogFooter>
+                    <Button type="submit" disabled={isSubmitting}>
+                      {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      {editingRoute ? "Save Changes" : "Add Route"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+        </div>
       </div>
       <Table>
         <TableHeader>
@@ -341,7 +378,7 @@ export default function RoutesTable() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {routes.map((route) => (
+          {filteredRoutes.map((route) => (
             <TableRow key={route.id}>
               <TableCell>{route.pickup} - {route.destination}</TableCell>
               <TableCell>{route.regionName}</TableCell>
