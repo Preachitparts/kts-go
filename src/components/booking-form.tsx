@@ -42,6 +42,7 @@ const bookingSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
   phone: z.string().regex(/^(\+233|0)[2-9]\d{8}$/, "Invalid Ghanaian phone number."),
   date: z.date({ required_error: "Departure date is required." }),
+  regionId: z.string().min(1, "Please select a region."),
   routeId: z.string().min(1, "Please select a route."),
   busId: z.string().min(1, "Please select a bus."),
   selectedSeats: z.array(z.string()).min(1, "Please select at least one seat."),
@@ -49,7 +50,8 @@ const bookingSchema = z.object({
   referralCode: z.string().optional(),
 });
 
-type Route = { id: string; pickup: string; destination: string; price: number; status: boolean; busIds?: string[] };
+type Region = { id: string; name: string };
+type Route = { id: string; pickup: string; destination: string; price: number; status: boolean; busIds?: string[]; regionId: string };
 type Bus = { id: string; numberPlate: string; capacity: number; status: boolean; };
 type Referral = { id: string; name: string; phone: string; };
 type Session = { id: string; routeId: string; busId: string; departureDate: Timestamp };
@@ -89,6 +91,7 @@ export function BookingForm() {
   const { toast } = useToast();
   const [totalAmount, setTotalAmount] = React.useState(0);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [regions, setRegions] = React.useState<Region[]>([]);
   const [routes, setRoutes] = React.useState<Route[]>([]);
   const [sessions, setSessions] = React.useState<Session[]>([]);
   const [availableBuses, setAvailableBuses] = React.useState<Bus[]>([]);
@@ -104,12 +107,14 @@ export function BookingForm() {
       phone: "",
       selectedSeats: [],
       emergencyContact: "",
+      regionId: "",
       routeId: "",
       busId: "",
       referralCode: "",
     },
   });
   
+  const selectedRegionId = form.watch("regionId");
   const selectedRouteId = form.watch("routeId");
   const selectedBusId = form.watch("busId");
   const selectedDate = form.watch("date");
@@ -119,26 +124,30 @@ export function BookingForm() {
     const fetchPrerequisites = async () => {
       setLoading(true);
       try {
+        const regionsQuery = collection(db, "regions");
         const routesQuery = query(collection(db, "routes"), where("status", "==", true));
         const referralsQuery = collection(db, "referrals");
         const sessionsQuery = query(collection(db, "sessions"));
         
-        const [routesSnapshot, referralsSnapshot, sessionsSnapshot] = await Promise.all([
+        const [regionsSnapshot, routesSnapshot, referralsSnapshot, sessionsSnapshot] = await Promise.all([
+            getDocs(regionsQuery),
             getDocs(routesQuery),
             getDocs(referralsQuery),
             getDocs(sessionsQuery),
         ]);
 
+        const regionsList = regionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Region));
         const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
         const referralsList = referralsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Referral));
         const sessionsList = sessionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Session));
         
+        setRegions(regionsList);
         setRoutes(routesList);
         setReferrals(referralsList);
         setSessions(sessionsList);
       } catch (error) {
         console.error("Error fetching prerequisites: ", error);
-        toast({ variant: "destructive", title: "Error", description: "Could not fetch available routes or sessions." });
+        toast({ variant: "destructive", title: "Error", description: "Could not fetch necessary booking data." });
       } finally {
         setLoading(false);
       }
@@ -146,6 +155,11 @@ export function BookingForm() {
     fetchPrerequisites();
   }, [toast]);
   
+  const availableRoutes = React.useMemo(() => {
+    if (!selectedRegionId) return [];
+    return routes.filter(route => route.regionId === selectedRegionId);
+  }, [selectedRegionId, routes]);
+
   const availableDates = React.useMemo(() => {
       if (!selectedRouteId) return [];
       return sessions
@@ -167,6 +181,10 @@ export function BookingForm() {
 
         if (sessionsForRouteAndDate.length > 0) {
             const busIds = sessionsForRouteAndDate.map(s => s.busId);
+            if (busIds.length === 0) {
+                setAvailableBuses([]);
+                return;
+            }
             const busesQuery = query(collection(db, "buses"), where("__name__", "in", busIds), where("status", "==", true));
             const busesSnapshot = await getDocs(busesQuery);
             const busesList = busesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bus));
@@ -289,6 +307,42 @@ export function BookingForm() {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <FormField
             control={form.control}
+            name="regionId"
+            render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Select Region</FormLabel>
+                    <Select 
+                        onValueChange={(value) => {
+                            field.onChange(value);
+                            form.setValue("routeId", "");
+                            form.setValue("date", undefined as any);
+                            form.setValue("busId", "");
+                            form.setValue("selectedSeats", []);
+                        }} 
+                        defaultValue={field.value}
+                        disabled={loading || regions.length === 0}
+                    >
+                    <FormControl>
+                        <SelectTrigger>
+                            <SelectValue placeholder={
+                                loading ? "Loading regions..." :
+                                regions.length === 0 ? "No regions available" :
+                                "Select a region"
+                            } />
+                        </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                        {regions.map((region) => (
+                            <SelectItem key={region.id} value={region.id}>{region.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                    </Select>
+                    <FormMessage />
+                </FormItem>
+            )}
+        />
+        <FormField
+            control={form.control}
             name="routeId"
             render={({ field }) => (
                 <FormItem>
@@ -302,19 +356,19 @@ export function BookingForm() {
                             setAvailableBuses([]);
                         }} 
                         defaultValue={field.value}
-                        disabled={loading || routes.length === 0}
+                        disabled={!selectedRegionId || availableRoutes.length === 0}
                     >
                     <FormControl>
                         <SelectTrigger>
                             <SelectValue placeholder={
-                                loading ? "Loading..." :
-                                routes.length === 0 ? "No routes available" :
+                                !selectedRegionId ? "Select a region first" :
+                                availableRoutes.length === 0 ? "No routes in this region" :
                                 "Select a route"
                             } />
                         </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                        {routes.map((route) => (
+                        {availableRoutes.map((route) => (
                             <SelectItem key={route.id} value={route.id}>{`${route.pickup} - ${route.destination} (GH₵ ${route.price.toFixed(2)})`}</SelectItem>
                         ))}
                     </SelectContent>

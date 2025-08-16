@@ -25,6 +25,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Switch } from "../ui/switch";
 import { Checkbox } from "../ui/checkbox";
 import { ScrollArea } from "../ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
 const routeSchema = z.object({
   pickup: z.string().min(1, "Pickup point is required."),
@@ -35,14 +36,17 @@ const routeSchema = z.object({
   ),
   status: z.boolean().default(true),
   busIds: z.array(z.string()).optional(),
+  regionId: z.string().min(1, "Please select a region."),
 });
 
-type Route = z.infer<typeof routeSchema> & { id: string };
+type Route = z.infer<typeof routeSchema> & { id: string, regionName?: string };
 type Bus = { id: string; numberPlate: string; capacity: number; status: boolean; };
+type Region = { id: string; name: string; };
 
 export default function RoutesTable() {
   const [routes, setRoutes] = useState<Route[]>([]);
   const [buses, setBuses] = useState<Bus[]>([]);
+  const [regions, setRegions] = useState<Region[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -57,6 +61,7 @@ export default function RoutesTable() {
         price: 0,
         status: true,
         busIds: [],
+        regionId: "",
     }
   });
 
@@ -65,21 +70,35 @@ export default function RoutesTable() {
     try {
       const routesCollection = collection(db, "routes");
       const busesQuery = query(collection(db, "buses"), where("status", "==", true));
+      const regionsCollection = collection(db, "regions");
 
-      const [routesSnapshot, busesSnapshot] = await Promise.all([
+      const [routesSnapshot, busesSnapshot, regionsSnapshot] = await Promise.all([
         getDocs(routesCollection),
-        getDocs(busesQuery)
+        getDocs(busesQuery),
+        getDocs(regionsSnapshot)
       ]);
       
-      const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), busIds: doc.data().busIds || [] } as Route));
+      const regionsList = regionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Region));
+      const regionMap = new Map(regionsList.map(r => [r.id, r.name]));
+
+      const routesList = routesSnapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+              id: doc.id,
+              ...data,
+              busIds: data.busIds || [],
+              regionName: regionMap.get(data.regionId) || "Unassigned"
+          } as Route;
+      });
       const busesList = busesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bus));
 
       setRoutes(routesList);
       setBuses(busesList);
+      setRegions(regionsList);
 
     } catch (error) {
       console.error("Error fetching prerequisites: ", error);
-      toast({ variant: "destructive", title: "Error", description: "Could not fetch routes or buses." });
+      toast({ variant: "destructive", title: "Error", description: "Could not fetch data." });
     } finally {
       setLoading(false);
     }
@@ -97,6 +116,7 @@ export default function RoutesTable() {
       price: route.price,
       status: route.status,
       busIds: route.busIds || [],
+      regionId: route.regionId,
     });
     setIsDialogOpen(true);
   };
@@ -167,6 +187,7 @@ export default function RoutesTable() {
         price: values.price,
         status: values.status,
         busIds: values.busIds || [],
+        regionId: values.regionId,
       };
 
       if (editingRoute) {
@@ -180,7 +201,7 @@ export default function RoutesTable() {
       fetchPrerequisites();
       setIsDialogOpen(false);
       setEditingRoute(null);
-      form.reset({ pickup: "", destination: "", price: 0, status: true, busIds: [] });
+      form.reset({ pickup: "", destination: "", price: 0, status: true, busIds: [], regionId: "" });
     } catch (error) {
       console.error("Error saving route: ", error);
       toast({ variant: "destructive", title: "Error", description: "Could not save route." });
@@ -191,7 +212,7 @@ export default function RoutesTable() {
 
   const openNewRouteDialog = () => {
     setEditingRoute(null);
-    form.reset({ pickup: "", destination: "", price: 0, status: true, busIds: [] });
+    form.reset({ pickup: "", destination: "", price: 0, status: true, busIds: [], regionId: "" });
     setIsDialogOpen(true);
   };
 
@@ -219,6 +240,26 @@ export default function RoutesTable() {
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="regionId" className="text-right">Region</Label>
+                    <Controller
+                        name="regionId"
+                        control={form.control}
+                        render={({ field }) => (
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <SelectTrigger className="col-span-3">
+                                    <SelectValue placeholder="Select a region" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {regions.map(region => (
+                                        <SelectItem key={region.id} value={region.id}>{region.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
+                    />
+                    {form.formState.errors.regionId && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.regionId.message}</p>}
+                </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="pickup" className="text-right">Pickup</Label>
                 <Input id="pickup" {...form.register("pickup")} className="col-span-3" />
@@ -291,6 +332,7 @@ export default function RoutesTable() {
         <TableHeader>
           <TableRow>
             <TableHead>Route</TableHead>
+            <TableHead>Region</TableHead>
             <TableHead>Price (GH₵)</TableHead>
             <TableHead>Assigned Buses</TableHead>
             <TableHead>Status</TableHead>
@@ -301,6 +343,7 @@ export default function RoutesTable() {
           {routes.map((route) => (
             <TableRow key={route.id}>
               <TableCell>{route.pickup} - {route.destination}</TableCell>
+              <TableCell>{route.regionName}</TableCell>
               <TableCell>{route.price.toFixed(2)}</TableCell>
               <TableCell>{route.busIds?.length || 0}</TableCell>
               <TableCell>

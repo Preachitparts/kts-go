@@ -26,6 +26,7 @@ import {
   Map,
   HeartHandshake,
   CalendarClock,
+  Globe,
 } from "lucide-react";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -135,11 +136,11 @@ export default function AdminLayout({
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname === '/admin/buses'}>
-                <Link href="/admin/buses">
-                  <Bus />
-                  Buses
+             <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={pathname === '/admin/regions'}>
+                <Link href="/admin/regions">
+                  <Globe />
+                  Regions
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -148,6 +149,14 @@ export default function AdminLayout({
                 <Link href="/admin/routes">
                   <Map />
                   Routes
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={pathname === '/admin/buses'}>
+                <Link href="/admin/buses">
+                  <Bus />
+                  Buses
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
