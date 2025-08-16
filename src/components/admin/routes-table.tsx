@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import {
@@ -246,7 +247,7 @@ export default function RoutesTable() {
                         name="regionId"
                         control={form.control}
                         render={({ field }) => (
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={field.onChange} value={field.value}>
                                 <SelectTrigger className="col-span-3">
                                     <SelectValue placeholder="Select a region" />
                                 </SelectTrigger>
@@ -389,4 +390,5 @@ export default function RoutesTable() {
       </Table>
     </>
   );
-}
+
+    
