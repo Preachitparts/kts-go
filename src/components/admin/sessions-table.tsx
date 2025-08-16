@@ -62,6 +62,7 @@ export default function SessionsTable() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [selectedSessions, setSelectedSessions] = useState<string[]>([]);
 
   const { toast } = useToast();
 
@@ -138,6 +139,7 @@ export default function SessionsTable() {
     try {
         await deleteDoc(doc(db, "sessions", sessionId));
         toast({ title: "Success", description: "Session deleted successfully." });
+        setSelectedSessions([]);
         fetchAllData();
     } catch (error) {
         console.error("Error deleting session: ", error);
@@ -145,9 +147,44 @@ export default function SessionsTable() {
     }
   };
 
+  const handleDeleteSelected = async () => {
+    if (selectedSessions.length === 0) return;
+    try {
+      const batch = writeBatch(db);
+      selectedSessions.forEach(id => {
+        const docRef = doc(db, "sessions", id);
+        batch.delete(docRef);
+      });
+      await batch.commit();
+      toast({ title: "Success", description: `${selectedSessions.length} sessions deleted.` });
+      setSelectedSessions([]);
+      fetchAllData();
+    } catch (error) {
+      console.error("Error deleting selected sessions:", error);
+      toast({ variant: "destructive", title: "Error", description: "Failed to delete selected sessions." });
+    }
+  };
+
+
   const handleViewClick = (session: Session) => {
     setViewingSession(session);
     setIsViewDialogOpen(true);
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedSessions(sessions.map(s => s.id));
+    } else {
+      setSelectedSessions([]);
+    }
+  };
+
+  const handleSelectSingle = (sessionId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedSessions(prev => [...prev, sessionId]);
+    } else {
+      setSelectedSessions(prev => prev.filter(id => id !== sessionId));
+    }
   };
 
   const onSubmit = async (values: z.infer<typeof sessionSchema>) => {
@@ -200,7 +237,32 @@ export default function SessionsTable() {
 
   return (
     <>
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-between items-center mb-4">
+        <div>
+          {selectedSessions.length > 0 && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive">
+                  <Trash2 className="mr-2 h-4 w-4" /> Delete ({selectedSessions.length})
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete {selectedSessions.length} session(s). This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDeleteSelected}>
+                    Yes, delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={openNewSessionDialog}>
@@ -352,6 +414,12 @@ export default function SessionsTable() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-[50px]">
+              <Checkbox
+                  checked={selectedSessions.length === sessions.length && sessions.length > 0}
+                  onCheckedChange={(checked) => handleSelectAll(!!checked)}
+              />
+            </TableHead>
             <TableHead>Departure Date</TableHead>
             <TableHead>Route</TableHead>
             <TableHead>Bus</TableHead>
@@ -364,12 +432,18 @@ export default function SessionsTable() {
             Object.entries(groupedSessions).map(([date, sessionsInGroup]) => (
                 <React.Fragment key={date}>
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
-                        <TableCell colSpan={5} className="font-semibold text-muted-foreground">
+                        <TableCell colSpan={6} className="font-semibold text-muted-foreground">
                             Created on: {date}
                         </TableCell>
                     </TableRow>
                     {sessionsInGroup.map((session) => (
                         <TableRow key={session.id}>
+                            <TableCell>
+                                <Checkbox
+                                    checked={selectedSessions.includes(session.id)}
+                                    onCheckedChange={(checked) => handleSelectSingle(session.id, !!checked)}
+                                />
+                            </TableCell>
                             <TableCell>{format(session.departureDate.toDate(), "PPP")}</TableCell>
                             <TableCell>{session.routeName}</TableCell>
                             <TableCell>{session.busName}</TableCell>
@@ -432,7 +506,7 @@ export default function SessionsTable() {
             ))
            ) : (
               <TableRow>
-                <TableCell colSpan={5} className="text-center">
+                <TableCell colSpan={6} className="text-center">
                   No sessions found.
                 </TableCell>
               </TableRow>
