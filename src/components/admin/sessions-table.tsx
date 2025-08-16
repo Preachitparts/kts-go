@@ -444,7 +444,7 @@ export default function SessionsTable() {
             {Object.keys(groupedSessions).length > 0 ? (
                 Object.entries(groupedSessions).map(([name, sessionsInGroup]) => (
                     <Collapsible asChild key={name}>
-                        <>
+                        <React.Fragment>
                             <TableRow className="bg-muted/20 hover:bg-muted/50">
                                 <TableCell>
                                     <Checkbox
@@ -560,7 +560,7 @@ export default function SessionsTable() {
                                     </TableCell>
                                 </TableRow>
                             </CollapsibleContent>
-                        </>
+                        </React.Fragment>
                     </Collapsible>
                 ))
             ) : (
@@ -625,5 +625,3 @@ export default function SessionsTable() {
     </>
   );
 }
-
-    
