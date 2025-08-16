@@ -17,7 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Calendar as CalendarIcon, PlusCircle, Loader2, Trash2, Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, Timestamp } from "firebase/firestore";
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, Timestamp, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -36,7 +36,7 @@ const sessionSchema = z.object({
 });
 
 type Route = { id: string; pickup: string; destination: string; price: number };
-type Bus = { id: string; numberPlate: string; capacity: number; status: string; };
+type Bus = { id: string; numberPlate: string; capacity: number; status: boolean; };
 type Session = { 
   id: string; 
   routeId: string; 
@@ -60,11 +60,22 @@ export default function SessionsTable() {
     resolver: zodResolver(sessionSchema),
   });
 
-  const fetchSessions = async (routesList: Route[], busesList: Bus[]) => {
+  const fetchAllData = async () => {
     setLoading(true);
     try {
+      const routesQuery = query(collection(db, "routes"), where("status", "==", true));
+      const busesQuery = query(collection(db, "buses"), where("status", "==", true));
       const sessionsCollection = collection(db, "sessions");
-      const sessionsSnapshot = await getDocs(sessionsCollection);
+      
+      const [routesSnapshot, busesSnapshot, sessionsSnapshot] = await Promise.all([
+          getDocs(routesQuery),
+          getDocs(busesQuery),
+          getDocs(sessionsCollection)
+      ]);
+      
+      const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
+      const busesList = busesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bus));
+      
       const sessionsList = sessionsSnapshot.docs.map(doc => {
         const data = doc.data() as Omit<Session, 'id'>;
         const route = routesList.find(r => r.id === data.routeId);
@@ -75,45 +86,23 @@ export default function SessionsTable() {
           routeName: route ? `${route.pickup} - ${route.destination}` : 'Unknown Route',
           busName: bus ? `${bus.numberPlate} (${bus.capacity} seats)` : 'Unknown Bus',
         };
-      });
+      }).sort((a, b) => b.departureDate.toMillis() - a.departureDate.toMillis());
+
+      setRoutes(routesList);
+      setBuses(busesList);
       setSessions(sessionsList);
+
     } catch (error) {
-      console.error("Error fetching sessions: ", error);
-      toast({ variant: "destructive", title: "Error", description: "Could not fetch sessions." });
+      console.error("Error fetching data: ", error);
+      toast({ variant: "destructive", title: "Error", description: "Could not fetch data." });
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchPrerequisites = async () => {
-      try {
-        const routesCollection = collection(db, "routes");
-        const busesCollection = collection(db, "buses");
-        
-        const [routesSnapshot, busesSnapshot] = await Promise.all([
-            getDocs(routesCollection),
-            getDocs(busesCollection)
-        ]);
-        
-        const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
-        const busesList = busesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bus));
-        
-        setRoutes(routesList);
-        setBuses(busesList);
-        return { routesList, busesList };
-      } catch (error) {
-        console.error("Error fetching prerequisites: ", error);
-        toast({ variant: "destructive", title: "Error", description: "Could not fetch routes or buses." });
-        return { routesList: [], busesList: [] };
-      }
-  }
 
   useEffect(() => {
-    const loadData = async () => {
-        const { routesList, busesList } = await fetchPrerequisites();
-        await fetchSessions(routesList, busesList);
-    }
-    loadData();
+    fetchAllData();
   }, []);
 
   const handleEditClick = (session: Session) => {
@@ -130,8 +119,7 @@ export default function SessionsTable() {
     try {
         await deleteDoc(doc(db, "sessions", sessionId));
         toast({ title: "Success", description: "Session deleted successfully." });
-        const { routesList, busesList } = await fetchPrerequisites();
-        await fetchSessions(routesList, busesList);
+        fetchAllData();
     } catch (error) {
         console.error("Error deleting session: ", error);
         toast({ variant: "destructive", title: "Error", description: "Failed to delete session." });
@@ -153,8 +141,7 @@ export default function SessionsTable() {
         await addDoc(collection(db, "sessions"), sessionData);
         toast({ title: "Success", description: "Session created successfully." });
       }
-      const { routesList, busesList } = await fetchPrerequisites();
-      await fetchSessions(routesList, busesList);
+      fetchAllData();
       setIsDialogOpen(false);
       setEditingSession(null);
       form.reset();
@@ -214,7 +201,7 @@ export default function SessionsTable() {
                             <SelectValue placeholder="Select a bus" />
                         </SelectTrigger>
                         <SelectContent>
-                            {buses.filter(b => b.status === "Active").map(bus => (
+                            {buses.map(bus => (
                                  <SelectItem key={bus.id} value={bus.id}>{`${bus.numberPlate} (${bus.capacity} seats)`}</SelectItem>
                             ))}
                         </SelectContent>
@@ -241,6 +228,7 @@ export default function SessionsTable() {
                                 mode="single"
                                 selected={form.watch("departureDate")}
                                 onSelect={(date) => form.setValue('departureDate', date as Date)}
+                                disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
                                 initialFocus
                             />
                         </PopoverContent>

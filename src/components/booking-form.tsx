@@ -52,6 +52,8 @@ const bookingSchema = z.object({
 type Route = { id: string; pickup: string; destination: string; price: number; status: boolean; busIds?: string[] };
 type Bus = { id: string; numberPlate: string; capacity: number; status: boolean; };
 type Referral = { id: string; name: string; phone: string; };
+type Session = { id: string; routeId: string; busId: string; departureDate: Timestamp };
+
 
 async function releaseExpiredSeats() {
     const fiveMinutesAgo = Timestamp.fromMillis(Date.now() - 5 * 60 * 1000);
@@ -88,12 +90,11 @@ export function BookingForm() {
   const [totalAmount, setTotalAmount] = React.useState(0);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [routes, setRoutes] = React.useState<Route[]>([]);
+  const [sessions, setSessions] = React.useState<Session[]>([]);
   const [availableBuses, setAvailableBuses] = React.useState<Bus[]>([]);
   const [referrals, setReferrals] = React.useState<Referral[]>([]);
   const [occupiedSeats, setOccupiedSeats] = React.useState<string[]>([]);
-  const [loadingRoutes, setLoadingRoutes] = React.useState(true);
-  const [loadingBuses, setLoadingBuses] = React.useState(false);
-  const [loadingReferrals, setLoadingReferrals] = React.useState(true);
+  const [loading, setLoading] = React.useState(true);
   const [loadingSeats, setLoadingSeats] = React.useState(false);
 
   const form = useForm<z.infer<typeof bookingSchema>>({
@@ -116,61 +117,67 @@ export function BookingForm() {
 
   React.useEffect(() => {
     const fetchPrerequisites = async () => {
-      setLoadingRoutes(true);
-      setLoadingReferrals(true);
+      setLoading(true);
       try {
         const routesQuery = query(collection(db, "routes"), where("status", "==", true));
         const referralsQuery = collection(db, "referrals");
+        const sessionsQuery = query(collection(db, "sessions"));
         
-        const [routesSnapshot, referralsSnapshot] = await Promise.all([
+        const [routesSnapshot, referralsSnapshot, sessionsSnapshot] = await Promise.all([
             getDocs(routesQuery),
-            getDocs(referralsQuery)
+            getDocs(referralsQuery),
+            getDocs(sessionsQuery),
         ]);
 
         const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
         const referralsList = referralsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Referral));
+        const sessionsList = sessionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Session));
         
         setRoutes(routesList);
         setReferrals(referralsList);
+        setSessions(sessionsList);
       } catch (error) {
         console.error("Error fetching prerequisites: ", error);
-        toast({ variant: "destructive", title: "Error", description: "Could not fetch available routes or referrals." });
+        toast({ variant: "destructive", title: "Error", description: "Could not fetch available routes or sessions." });
       } finally {
-        setLoadingRoutes(false);
-        setLoadingReferrals(false);
+        setLoading(false);
       }
     };
     fetchPrerequisites();
   }, [toast]);
   
+  const availableDates = React.useMemo(() => {
+      if (!selectedRouteId) return [];
+      return sessions
+          .filter(session => session.routeId === selectedRouteId)
+          .map(session => session.departureDate.toDate());
+  }, [selectedRouteId, sessions]);
+
   React.useEffect(() => {
-    const fetchBusesForRoute = async () => {
-      if (!selectedRouteId) {
-        setAvailableBuses([]);
-        return;
-      }
-      setLoadingBuses(true);
-      form.setValue("busId", "");
-      try {
-        const route = routes.find(r => r.id === selectedRouteId);
-        if (route && route.busIds && route.busIds.length > 0) {
-            const busesQuery = query(collection(db, "buses"), where("__name__", "in", route.busIds), where("status", "==", true));
+    const fetchBusesForRouteAndDate = async () => {
+        if (!selectedRouteId || !selectedDate) {
+            setAvailableBuses([]);
+            return;
+        }
+        
+        const sessionsForRouteAndDate = sessions.filter(session => 
+            session.routeId === selectedRouteId && 
+            format(session.departureDate.toDate(), 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')
+        );
+
+        if (sessionsForRouteAndDate.length > 0) {
+            const busIds = sessionsForRouteAndDate.map(s => s.busId);
+            const busesQuery = query(collection(db, "buses"), where("__name__", "in", busIds), where("status", "==", true));
             const busesSnapshot = await getDocs(busesQuery);
             const busesList = busesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bus));
             setAvailableBuses(busesList);
         } else {
-             setAvailableBuses([]);
+            setAvailableBuses([]);
         }
-      } catch (error) {
-        console.error("Error fetching buses for route: ", error);
-        toast({ variant: "destructive", title: "Error", description: "Could not fetch buses for the selected route." });
-        setAvailableBuses([]);
-      } finally {
-        setLoadingBuses(false);
-      }
     };
-    fetchBusesForRoute();
-  }, [selectedRouteId, routes, toast, form]);
+    fetchBusesForRouteAndDate();
+}, [selectedRouteId, selectedDate, sessions]);
+
 
   React.useEffect(() => {
     const fetchOccupiedSeats = async () => {
@@ -193,9 +200,8 @@ export function BookingForm() {
             ]);
             
             const filterByDate = (doc: any) => {
-                const docDate = doc.data().date;
-                // doc.data().date is an ISO string, so we format it to compare
-                const docDateStr = format(new Date(docDate), "yyyy-MM-dd");
+                const docDate = doc.data().date?.toDate ? doc.data().date.toDate() : new Date(doc.data().date);
+                const docDateStr = format(docDate, "yyyy-MM-dd");
                 return docDateStr === targetDate;
             };
 
@@ -282,6 +288,145 @@ export function BookingForm() {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <FormField
+            control={form.control}
+            name="routeId"
+            render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Select Route</FormLabel>
+                    <Select 
+                        onValueChange={(value) => {
+                            field.onChange(value);
+                            form.setValue("date", undefined as any);
+                            form.setValue("busId", "");
+                            form.setValue("selectedSeats", []);
+                            setAvailableBuses([]);
+                        }} 
+                        defaultValue={field.value}
+                        disabled={loading || routes.length === 0}
+                    >
+                    <FormControl>
+                        <SelectTrigger>
+                            <SelectValue placeholder={
+                                loading ? "Loading..." :
+                                routes.length === 0 ? "No routes available" :
+                                "Select a route"
+                            } />
+                        </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                        {routes.map((route) => (
+                            <SelectItem key={route.id} value={route.id}>{`${route.pickup} - ${route.destination} (GH₵ ${route.price.toFixed(2)})`}</SelectItem>
+                        ))}
+                    </SelectContent>
+                    </Select>
+                    <FormMessage />
+                </FormItem>
+            )}
+        />
+        <FormField
+          control={form.control}
+          name="date"
+          render={({ field }) => (
+              <FormItem className="flex flex-col">
+              <FormLabel>Departure Date</FormLabel>
+              <Popover>
+                  <PopoverTrigger asChild>
+                  <FormControl>
+                      <Button
+                      variant={"outline"}
+                      className={cn(
+                          "pl-3 text-left font-normal",
+                          !field.value && "text-muted-foreground"
+                      )}
+                      disabled={!selectedRouteId || availableDates.length === 0}
+                      >
+                      {field.value ? (
+                          format(field.value, "PPP")
+                      ) : (
+                          <span>{!selectedRouteId ? 'Select a route first' : 'Pick a date'}</span>
+                      )}
+                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                      </Button>
+                  </FormControl>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                      mode="single"
+                      selected={field.value}
+                      onSelect={(date) => {
+                          if (date) {
+                              field.onChange(date);
+                              form.setValue("busId", "");
+                              form.setValue("selectedSeats", []);
+                          }
+                      }}
+                      disabled={(date) => 
+                          date < new Date(new Date().setHours(0,0,0,0)) || 
+                          !availableDates.some(ad => format(ad, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd'))
+                      }
+                      initialFocus
+                  />
+                  </PopoverContent>
+              </Popover>
+              <FormMessage />
+              </FormItem>
+          )}
+        />
+        <FormField
+            control={form.control}
+            name="busId"
+            render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Select Bus</FormLabel>
+                    <Select 
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          form.setValue("selectedSeats", []);
+                        }}
+                        defaultValue={field.value}
+                        disabled={!selectedDate || availableBuses.length === 0}
+                    >
+                    <FormControl>
+                        <SelectTrigger>
+                            <SelectValue placeholder={
+                                !selectedDate ? "Select a date first" :
+                                availableBuses.length === 0 ? "No buses for this date" :
+                                "Select a bus"
+                            } />
+                        </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                        {availableBuses.map((bus) => (
+                            <SelectItem key={bus.id} value={bus.id}>{`${bus.numberPlate} (${bus.capacity} Seater)`}</SelectItem>
+                        ))}
+                    </SelectContent>
+                    </Select>
+                    <FormMessage />
+                </FormItem>
+            )}
+        />
+        {selectedBus && (
+            <FormField
+                control={form.control}
+                name="selectedSeats"
+                render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Select Seat(s)</FormLabel>
+                        <FormControl>
+                            <SeatSelection
+                                capacity={selectedBus.capacity}
+                                selectedSeats={field.value}
+                                occupiedSeats={occupiedSeats}
+                                isLoading={loadingSeats}
+                                onSeatsChange={field.onChange}
+                            />
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )}
+            />
+        )}
+        <FormField
           control={form.control}
           name="name"
           render={({ field }) => (
@@ -322,145 +467,6 @@ export function BookingForm() {
             )}
             />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField
-            control={form.control}
-            name="date"
-            render={({ field }) => (
-                <FormItem className="flex flex-col pt-2">
-                <FormLabel>Departure Date</FormLabel>
-                <Popover>
-                    <PopoverTrigger asChild>
-                    <FormControl>
-                        <Button
-                        variant={"outline"}
-                        className={cn(
-                            "pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground"
-                        )}
-                        >
-                        {field.value ? (
-                            format(field.value, "PPP")
-                        ) : (
-                            <span>Pick a date</span>
-                        )}
-                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                    </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={(date) => {
-                            if (date) {
-                                field.onChange(date);
-                                form.setValue("selectedSeats", []);
-                            }
-                        }}
-                        disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) || date > new Date(new Date().setMonth(new Date().getMonth() + 3))}
-                        initialFocus
-                    />
-                    </PopoverContent>
-                </Popover>
-                <FormMessage />
-                </FormItem>
-            )}
-            />
-             <FormField
-                control={form.control}
-                name="routeId"
-                render={({ field }) => (
-                    <FormItem className="flex flex-col pt-2">
-                        <FormLabel>Select Route</FormLabel>
-                        <Select 
-                            onValueChange={(value) => {
-                                field.onChange(value);
-                                form.setValue("busId", "");
-                                form.setValue("selectedSeats", []);
-                                setAvailableBuses([]);
-                            }} 
-                            defaultValue={field.value}
-                            disabled={loadingRoutes || routes.length === 0}
-                        >
-                        <FormControl>
-                            <SelectTrigger>
-                                <SelectValue placeholder={
-                                    loadingRoutes ? "Loading routes..." :
-                                    routes.length === 0 ? "No routes available" :
-                                    "Select a route"
-                                } />
-                            </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                            {routes.map((route) => (
-                                <SelectItem key={route.id} value={route.id}>{`${route.pickup} - ${route.destination} (GH₵ ${route.price.toFixed(2)})`}</SelectItem>
-                            ))}
-                        </SelectContent>
-                        </Select>
-                        <FormMessage />
-                    </FormItem>
-                )}
-            />
-        </div>
-
-        <FormField
-            control={form.control}
-            name="busId"
-            render={({ field }) => (
-                <FormItem>
-                    <FormLabel>Select Bus</FormLabel>
-                    <Select 
-                        onValueChange={(value) => {
-                          field.onChange(value);
-                          form.setValue("selectedSeats", []);
-                        }}
-                        defaultValue={field.value}
-                        disabled={!selectedRouteId || loadingBuses || availableBuses.length === 0}
-                    >
-                    <FormControl>
-                        <SelectTrigger>
-                            <SelectValue placeholder={
-                                loadingBuses ? "Loading buses..." :
-                                !selectedRouteId ? "Select a route first" :
-                                availableBuses.length === 0 ? "No buses for this route" :
-                                "Select a bus"
-                            } />
-                        </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                        {availableBuses.map((bus) => (
-                            <SelectItem key={bus.id} value={bus.id}>{`${bus.numberPlate} (${bus.capacity} Seater)`}</SelectItem>
-                        ))}
-                    </SelectContent>
-                    </Select>
-                    <FormMessage />
-                </FormItem>
-            )}
-        />
-
-        {selectedBus && (
-            <FormField
-                control={form.control}
-                name="selectedSeats"
-                render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Select Seat(s)</FormLabel>
-                        <FormControl>
-                            <SeatSelection
-                                capacity={selectedBus.capacity}
-                                selectedSeats={field.value}
-                                occupiedSeats={occupiedSeats}
-                                isLoading={loadingSeats}
-                                onSeatsChange={field.onChange}
-                            />
-                        </FormControl>
-                        <FormMessage />
-                    </FormItem>
-                )}
-            />
-        )}
-        
         <FormField
             control={form.control}
             name="referralCode"
@@ -470,12 +476,12 @@ export function BookingForm() {
                  <Select 
                     onValueChange={field.onChange} 
                     defaultValue={field.value}
-                    disabled={loadingReferrals}
+                    disabled={loading}
                 >
                     <FormControl>
                         <SelectTrigger>
                             <SelectValue placeholder={
-                                loadingReferrals ? "Loading referrals..." : "Select a referral"
+                                loading ? "Loading..." : "Select a referral"
                             } />
                         </SelectTrigger>
                     </FormControl>
@@ -490,12 +496,10 @@ export function BookingForm() {
                 </FormItem>
             )}
         />
-        
         <div className="bg-secondary p-4 rounded-lg text-center mt-4">
           <p className="text-muted-foreground">Total Amount</p>
           <p className="text-3xl font-bold">GH₵ {totalAmount.toFixed(2)}</p>
         </div>
-
         <Button type="submit" className="w-full !mt-6" size="lg" disabled={isSubmitting}>
           {isSubmitting ? (
             <>
