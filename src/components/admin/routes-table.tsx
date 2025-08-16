@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PlusCircle, Loader2, Trash2, Pencil, ArrowRightLeft, CheckCircle, Search } from "lucide-react";
+import { PlusCircle, Loader2, Trash2, Pencil, ArrowRightLeft, CheckCircle, Search, MoreHorizontal } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, writeBatch, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -27,6 +27,7 @@ import { Switch } from "../ui/switch";
 import { Checkbox } from "../ui/checkbox";
 import { ScrollArea } from "../ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../ui/dropdown-menu";
 
 const routeSchema = z.object({
   pickup: z.string().min(1, "Pickup point is required."),
@@ -281,9 +282,8 @@ export default function RoutesTable() {
                         <Controller
                             name="regionId"
                             control={form.control}
-                            defaultValue={editingRoute?.regionId || ""}
                             render={({ field }) => (
-                                <Select onValueChange={field.onChange} value={field.value}>
+                                <Select onValueChange={field.onChange} value={field.value} defaultValue={editingRoute?.regionId || ""}>
                                     <SelectTrigger className="col-span-3">
                                         <SelectValue placeholder="Select a region" />
                                     </SelectTrigger>
@@ -391,19 +391,34 @@ export default function RoutesTable() {
                     aria-readonly
                   />
               </TableCell>
-              <TableCell className="text-right space-x-2">
-                 <Button variant="outline" size="icon" onClick={() => handleSwap(route)}>
-                  <ArrowRightLeft className="h-4 w-4" />
-                </Button>
-                <Button variant="outline" size="icon" onClick={() => handleEditClick(route)}>
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                 <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="icon">
-                            <Trash2 className="h-4 w-4" />
+              <TableCell className="text-right">
+                <AlertDialog>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                          <span className="sr-only">Open menu</span>
+                          <MoreHorizontal className="h-4 w-4" />
                         </Button>
-                    </AlertDialogTrigger>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuItem onClick={() => handleSwap(route)}>
+                          <ArrowRightLeft className="mr-2 h-4 w-4" />
+                          <span>Swap</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleEditClick(route)}>
+                          <Pencil className="mr-2 h-4 w-4" />
+                          <span>Edit</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <AlertDialogTrigger asChild>
+                          <DropdownMenuItem className="text-red-600">
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            <span>Delete</span>
+                          </DropdownMenuItem>
+                        </AlertDialogTrigger>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <AlertDialogContent>
                         <AlertDialogHeader>
                             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -427,5 +442,4 @@ export default function RoutesTable() {
       </Table>
     </>
   );
-
-    
+}
