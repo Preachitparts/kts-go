@@ -75,7 +75,7 @@ export default function RoutesTable() {
       const [routesSnapshot, busesSnapshot, regionsSnapshot] = await Promise.all([
         getDocs(routesCollection),
         getDocs(busesQuery),
-        getDocs(regionsSnapshot)
+        getDocs(regionsCollection)
       ]);
       
       const regionsList = regionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Region));
