@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Calendar as CalendarIcon, PlusCircle, Loader2, Trash2, Pencil } from "lucide-react";
+import { Calendar as CalendarIcon, PlusCircle, Loader2, Trash2, Pencil, MoreHorizontal, Eye } from "lucide-react";
 import { useEffect, useState } from "react";
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, Timestamp, query, where, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -28,6 +28,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "../ui/scroll-area";
 import { Checkbox } from "../ui/checkbox";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../ui/dropdown-menu";
 
 
 const sessionSchema = z.object({
@@ -43,6 +44,7 @@ type Session = {
   routeId: string; 
   busId: string; 
   departureDate: Timestamp; 
+  createdAt: Timestamp;
   routeName?: string;
   busName?: string;
 };
@@ -54,7 +56,9 @@ export default function SessionsTable() {
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingSession, setEditingSession] = useState<Session | null>(null);
+  const [viewingSession, setViewingSession] = useState<Session | null>(null);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof sessionSchema>>({
@@ -92,7 +96,7 @@ export default function SessionsTable() {
           routeName: route ? `${route.pickup} - ${route.destination}` : 'Unknown Route',
           busName: bus ? `${bus.numberPlate} (${bus.capacity} seats)` : 'Unknown Bus',
         };
-      }).sort((a, b) => b.departureDate.toMillis() - a.departureDate.toMillis());
+      }).sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
 
       setRoutes(routesList);
       setBuses(busesList);
@@ -112,10 +116,6 @@ export default function SessionsTable() {
   }, []);
 
   const handleEditClick = (session: Session) => {
-    // Editing a single session remains a singular action.
-    // We can't use the bulk form for editing one item.
-    // For now, let's disable editing from this new UI to avoid complexity.
-    // A proper implementation would need a separate, single-edit form.
     toast({ title: "Info", description: "Editing sessions is disabled in this view. Please delete and recreate if needed." });
   };
   
@@ -128,6 +128,11 @@ export default function SessionsTable() {
         console.error("Error deleting session: ", error);
         toast({ variant: "destructive", title: "Error", description: "Failed to delete session." });
     }
+  };
+
+  const handleViewClick = (session: Session) => {
+    setViewingSession(session);
+    setIsViewDialogOpen(true);
   };
 
   const onSubmit = async (values: z.infer<typeof sessionSchema>) => {
@@ -144,6 +149,7 @@ export default function SessionsTable() {
                         routeId,
                         busId,
                         departureDate: Timestamp.fromDate(date),
+                        createdAt: Timestamp.now(), // Add creation timestamp
                     });
                     sessionCount++;
                 });
@@ -169,7 +175,6 @@ export default function SessionsTable() {
   };
 
   const openNewSessionDialog = () => {
-    setEditingSession(null);
     form.reset({ routeIds: [], busIds: [], departureDates: [] });
     setIsDialogOpen(true);
   };
@@ -207,7 +212,7 @@ export default function SessionsTable() {
                                 <div className="flex items-center space-x-2 pb-2 border-b mb-2">
                                     <Checkbox
                                         id="selectAllRoutes"
-                                        checked={field.value.length === routes.length}
+                                        checked={field.value.length === routes.length && routes.length > 0}
                                         onCheckedChange={(checked) => {
                                             field.onChange(checked ? routes.map(r => r.id) : []);
                                         }}
@@ -246,7 +251,7 @@ export default function SessionsTable() {
                                 <div className="flex items-center space-x-2 pb-2 border-b mb-2">
                                     <Checkbox
                                         id="selectAllBuses"
-                                        checked={field.value.length === buses.length}
+                                        checked={field.value.length === buses.length && buses.length > 0}
                                         onCheckedChange={(checked) => {
                                             field.onChange(checked ? buses.map(b => b.id) : []);
                                         }}
@@ -332,9 +337,10 @@ export default function SessionsTable() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead>Created On</TableHead>
+            <TableHead>Departure Date</TableHead>
             <TableHead>Route</TableHead>
             <TableHead>Bus</TableHead>
-            <TableHead>Departure Date</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
@@ -342,9 +348,10 @@ export default function SessionsTable() {
         <TableBody>
           {sessions.map((session) => (
             <TableRow key={session.id}>
+              <TableCell>{session.createdAt ? format(session.createdAt.toDate(), "PP") : 'N/A'}</TableCell>
+              <TableCell>{format(session.departureDate.toDate(), "PPP")}</TableCell>
               <TableCell>{session.routeName}</TableCell>
               <TableCell>{session.busName}</TableCell>
-              <TableCell>{format(session.departureDate.toDate(), "PPP")}</TableCell>
               <TableCell>
                   <Badge variant={
                       session.departureDate.toDate() > new Date() ? 'default' : 'secondary'
@@ -354,16 +361,34 @@ export default function SessionsTable() {
                       {session.departureDate.toDate() > new Date() ? 'Upcoming' : 'Completed'}
                   </Badge>
               </TableCell>
-              <TableCell className="text-right space-x-2">
-                <Button variant="outline" size="icon" onClick={() => handleEditClick(session)} disabled>
-                  <Pencil className="h-4 w-4" />
-                </Button>
+              <TableCell className="text-right">
                 <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="icon">
-                            <Trash2 className="h-4 w-4" />
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                          <span className="sr-only">Open menu</span>
+                          <MoreHorizontal className="h-4 w-4" />
                         </Button>
-                    </AlertDialogTrigger>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuItem onClick={() => handleViewClick(session)}>
+                          <Eye className="mr-2 h-4 w-4" />
+                          <span>View Details</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleEditClick(session)} disabled>
+                          <Pencil className="mr-2 h-4 w-4" />
+                          <span>Edit</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <AlertDialogTrigger asChild>
+                          <DropdownMenuItem className="text-red-600">
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            <span>Delete</span>
+                          </DropdownMenuItem>
+                        </AlertDialogTrigger>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <AlertDialogContent>
                         <AlertDialogHeader>
                             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -384,13 +409,60 @@ export default function SessionsTable() {
           ))}
            {sessions.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center">
+                <TableCell colSpan={6} className="text-center">
                   No sessions found.
                 </TableCell>
               </TableRow>
             )}
         </TableBody>
       </Table>
+      
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Session Details</DialogTitle>
+                <DialogDescription>
+                    Reviewing details for the selected session.
+                </DialogDescription>
+            </DialogHeader>
+            {viewingSession && (
+                <div className="grid gap-4 py-4 text-sm">
+                    <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+                        <Label className="text-right text-muted-foreground">Route</Label>
+                        <span>{viewingSession.routeName}</span>
+                    </div>
+                    <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+                        <Label className="text-right text-muted-foreground">Bus</Label>
+                        <span>{viewingSession.busName}</span>
+                    </div>
+                    <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+                        <Label className="text-right text-muted-foreground">Departure Date</Label>
+                        <span>{format(viewingSession.departureDate.toDate(), "PPPP")}</span>
+                    </div>
+                    <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+                        <Label className="text-right text-muted-foreground">Created On</Label>
+                        <span>{viewingSession.createdAt ? format(viewingSession.createdAt.toDate(), "PPpp") : 'N/A'}</span>
+                    </div>
+                     <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+                        <Label className="text-right text-muted-foreground">Status</Label>
+                        <Badge variant={
+                            viewingSession.departureDate.toDate() > new Date() ? 'default' : 'secondary'
+                        } className={cn(
+                            'w-fit',
+                            viewingSession.departureDate.toDate() > new Date() ? 'bg-blue-500' : 'bg-gray-500'
+                        )}>
+                            {viewingSession.departureDate.toDate() > new Date() ? 'Upcoming' : 'Completed'}
+                        </Badge>
+                    </div>
+                </div>
+            )}
+            <DialogFooter>
+                <Button onClick={() => setIsViewDialogOpen(false)}>Close</Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
+
+    
