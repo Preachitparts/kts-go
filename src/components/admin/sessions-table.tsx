@@ -32,6 +32,7 @@ import { Checkbox } from "../ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Input } from "../ui/input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
 
 const sessionSchema = z.object({
@@ -67,6 +68,12 @@ export default function SessionsTable() {
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [selectedSessions, setSelectedSessions] = useState<string[]>([]);
+  
+  // Filter states
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  const [selectedRouteId, setSelectedRouteId] = useState<string>("all");
+  const [selectedBusId, setSelectedBusId] = useState<string>("all");
+
 
   const { toast } = useToast();
 
@@ -125,8 +132,17 @@ export default function SessionsTable() {
     fetchAllData();
   }, []);
 
+  const filteredSessions = useMemo(() => {
+    return sessions.filter(session => {
+        const dateMatch = !selectedDate || format(session.departureDate.toDate(), 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
+        const routeMatch = selectedRouteId === 'all' || session.routeId === selectedRouteId;
+        const busMatch = selectedBusId === 'all' || session.busId === selectedBusId;
+        return dateMatch && routeMatch && busMatch;
+    });
+  }, [sessions, selectedDate, selectedRouteId, selectedBusId]);
+
   const groupedSessions = useMemo(() => {
-    return sessions.reduce((acc, session) => {
+    return filteredSessions.reduce((acc, session) => {
         const nameKey = session.name || 'Untitled Session';
         if (!acc[nameKey]) {
             acc[nameKey] = [];
@@ -134,7 +150,7 @@ export default function SessionsTable() {
         acc[nameKey].push(session);
         return acc;
     }, {} as GroupedSessions);
-  }, [sessions]);
+  }, [filteredSessions]);
 
   const handleEditClick = (session: Session) => {
     toast({ title: "Info", description: "Editing sessions is disabled in this view. Please delete and recreate if needed." });
@@ -178,7 +194,7 @@ export default function SessionsTable() {
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedSessions(sessions.map(s => s.id));
+      setSelectedSessions(filteredSessions.map(s => s.id));
     } else {
       setSelectedSessions([]);
     }
@@ -241,7 +257,7 @@ export default function SessionsTable() {
     const headers = ["Session Name", "Departure Date", "Route", "Bus", "Status"];
     const csvContent = [
       headers.join(","),
-      ...sessions.map(s => 
+      ...filteredSessions.map(s => 
         [
           `"${s.name}"`,
           format(s.departureDate.toDate(), "PPP"),
@@ -271,40 +287,56 @@ export default function SessionsTable() {
 
   return (
     <>
-      <div className="flex justify-between items-center mb-4">
-        <div>
-          {selectedSessions.length > 0 ? (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive">
-                  <Trash2 className="mr-2 h-4 w-4" /> Delete ({selectedSessions.length})
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will permanently delete {selectedSessions.length} session(s). This action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDeleteSelected}>
-                    Yes, delete
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          ) : <div></div>}
+      <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+        <div className="flex flex-col sm:flex-row gap-2 w-full">
+            <Popover>
+                <PopoverTrigger asChild>
+                    <Button
+                    variant={"outline"}
+                    className={cn("w-full sm:w-[240px] justify-start text-left font-normal", !selectedDate && "text-muted-foreground")}
+                    >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {selectedDate ? format(selectedDate, "PPP") : <span>Filter by date...</span>}
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                    <Calendar mode="single" selected={selectedDate} onSelect={setSelectedDate} initialFocus />
+                </PopoverContent>
+            </Popover>
+            <Select value={selectedRouteId} onValueChange={setSelectedRouteId}>
+                <SelectTrigger className="w-full sm:w-[240px]">
+                    <SelectValue placeholder="Filter by route..." />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">All Routes</SelectItem>
+                    {routes.map(route => (
+                    <SelectItem key={route.id} value={route.id}>{`${route.pickup} - ${route.destination}`}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            <Select value={selectedBusId} onValueChange={setSelectedBusId}>
+                <SelectTrigger className="w-full sm:w-[240px]">
+                    <SelectValue placeholder="Filter by bus..." />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">All Buses</SelectItem>
+                    {buses.map(bus => (
+                    <SelectItem key={bus.id} value={bus.id}>{`${bus.numberPlate}`}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+             {(selectedDate || selectedRouteId !== 'all' || selectedBusId !== 'all') &&
+                <Button variant="ghost" onClick={() => { setSelectedDate(undefined); setSelectedRouteId("all"); setSelectedBusId("all"); }}>Clear Filters</Button>
+             }
         </div>
-        <div className="flex gap-2">
+        <div className="flex justify-end gap-2 w-full md:w-auto">
             <Button variant="outline" onClick={downloadCSV}>
-                <Download className="mr-2 h-4 w-4" /> Download CSV
+                <Download className="mr-2 h-4 w-4" /> Download
             </Button>
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
                 <Button onClick={openNewSessionDialog}>
-                <PlusCircle className="mr-2 h-4 w-4" /> Create Session(s)
+                <PlusCircle className="mr-2 h-4 w-4" /> Create
                 </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
@@ -457,13 +489,40 @@ export default function SessionsTable() {
             </Dialog>
         </div>
       </div>
-       <div className="border rounded-md">
+      <div className="mt-4 flex justify-between items-center">
+        <div>
+          {selectedSessions.length > 0 && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive">
+                  <Trash2 className="mr-2 h-4 w-4" /> Delete ({selectedSessions.length})
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete {selectedSessions.length} session(s). This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDeleteSelected}>
+                    Yes, delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
+      </div>
+       <div className="border rounded-md mt-4">
         <Table>
             <TableHeader>
             <TableRow>
                 <TableHead className="w-[50px]">
                 <Checkbox
-                    checked={selectedSessions.length === sessions.length && sessions.length > 0}
+                    checked={selectedSessions.length === filteredSessions.length && filteredSessions.length > 0}
                     onCheckedChange={(checked) => handleSelectAll(!!checked)}
                 />
                 </TableHead>
@@ -476,8 +535,8 @@ export default function SessionsTable() {
             <TableBody>
             {Object.keys(groupedSessions).length > 0 ? (
                 Object.entries(groupedSessions).map(([name, sessionsInGroup]) => (
-                    <Collapsible asChild key={name}>
-                        <React.Fragment>
+                    <Collapsible asChild key={name} defaultOpen>
+                        <>
                             <TableRow className="bg-muted/20 hover:bg-muted/50">
                                 <TableCell>
                                     <Checkbox
@@ -593,7 +652,7 @@ export default function SessionsTable() {
                                     </TableCell>
                                 </TableRow>
                             </CollapsibleContent>
-                        </React.Fragment>
+                        </>
                     </Collapsible>
                 ))
             ) : (
@@ -658,5 +717,3 @@ export default function SessionsTable() {
     </>
   );
 }
-
-    
