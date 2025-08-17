@@ -43,16 +43,6 @@ export default function RejectedBookingsTab() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const { toast } = useToast();
 
-  const fetchPrerequisites = async () => {
-    try {
-        const routesSnapshot = await getDocs(collection(db, "routes"));
-        const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
-        setRoutes(routesList);
-    } catch (error) {
-        console.error("Error fetching routes:", error);
-    }
-  };
-
   const fetchBookings = async () => {
     setLoading(true);
     try {
@@ -68,6 +58,16 @@ export default function RejectedBookingsTab() {
   };
   
   useEffect(() => {
+    const fetchPrerequisites = async () => {
+      try {
+          const routesSnapshot = await getDocs(collection(db, "routes"));
+          const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
+          setRoutes(routesList);
+      } catch (error) {
+          console.error("Error fetching routes:", error);
+      }
+    };
+    
     fetchPrerequisites();
     fetchBookings();
   }, []);

@@ -35,31 +35,31 @@ export default function ApprovedBookingsTab() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { toast } = useToast();
 
-  const fetchPrerequisites = async () => {
-    try {
-        const routesSnapshot = await getDocs(collection(db, "routes"));
-        const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
-        setRoutes(routesList);
-    } catch (error) {
-        console.error("Error fetching routes:", error);
-    }
-  };
-
-  const fetchBookings = async () => {
-    setLoading(true);
-    try {
-      const q = query(collection(db, "approved_bookings"));
-      const querySnapshot = await getDocs(q);
-      const bookingsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setBookings(bookingsList);
-    } catch (error) {
-      console.error("Error fetching approved bookings: ", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
   useEffect(() => {
+    const fetchPrerequisites = async () => {
+      try {
+          const routesSnapshot = await getDocs(collection(db, "routes"));
+          const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
+          setRoutes(routesList);
+      } catch (error) {
+          console.error("Error fetching routes:", error);
+      }
+    };
+
+    const fetchBookings = async () => {
+      setLoading(true);
+      try {
+        const q = query(collection(db, "approved_bookings"));
+        const querySnapshot = await getDocs(q);
+        const bookingsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setBookings(bookingsList);
+      } catch (error) {
+        console.error("Error fetching approved bookings: ", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
     fetchPrerequisites();
     fetchBookings();
   }, []);
@@ -81,7 +81,11 @@ export default function ApprovedBookingsTab() {
       await batch.commit();
 
       toast({ title: "Success", description: "Booking moved back to pending." });
-      fetchBookings();
+      // Re-fetch bookings after action
+      const q = query(collection(db, "approved_bookings"));
+      const querySnapshot = await getDocs(q);
+      const bookingsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setBookings(bookingsList);
       setIsDialogOpen(false);
     } catch (error) {
       console.error("Error unapproving booking: ", error);
@@ -106,7 +110,11 @@ export default function ApprovedBookingsTab() {
       await batch.commit();
 
       toast({ title: "Success", description: "Booking rejected and moved." });
-      fetchBookings();
+      // Re-fetch bookings after action
+      const q = query(collection(db, "approved_bookings"));
+      const querySnapshot = await getDocs(q);
+      const bookingsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setBookings(bookingsList);
       setIsDialogOpen(false);
     } catch (error) {
       console.error("Error rejecting booking: ", error);

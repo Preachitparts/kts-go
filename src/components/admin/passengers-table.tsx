@@ -1,3 +1,4 @@
+
 "use client";
 import {
   Table,
@@ -18,6 +19,7 @@ export default function PassengersTable() {
 
   useEffect(() => {
     const fetchPassengers = async () => {
+      setLoading(true);
       try {
         const passengersCollection = collection(db, "passengers");
         const passengersSnapshot = await getDocs(passengersCollection);

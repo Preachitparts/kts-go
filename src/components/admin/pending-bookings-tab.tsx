@@ -35,16 +35,6 @@ export default function PendingBookingsTab() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { toast } = useToast();
 
-  const fetchPrerequisites = async () => {
-    try {
-        const routesSnapshot = await getDocs(collection(db, "routes"));
-        const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
-        setRoutes(routesList);
-    } catch (error) {
-        console.error("Error fetching routes:", error);
-    }
-  };
-
   const fetchBookings = async () => {
     setLoading(true);
     try {
@@ -58,8 +48,18 @@ export default function PendingBookingsTab() {
       setLoading(false);
     }
   };
-  
+
   useEffect(() => {
+    const fetchPrerequisites = async () => {
+      try {
+          const routesSnapshot = await getDocs(collection(db, "routes"));
+          const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
+          setRoutes(routesList);
+      } catch (error) {
+          console.error("Error fetching routes:", error);
+      }
+    };
+    
     fetchPrerequisites();
     fetchBookings();
   }, []);

@@ -34,36 +34,36 @@ export default function ReferralAnalyticsTab() {
   const [referredPassengers, setReferredPassengers] = useState<string[]>([]);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
-  const fetchAnalytics = async () => {
-    setLoading(true);
-    try {
-      const referralsSnapshot = await getDocs(collection(db, "referrals"));
-      const referrals = referralsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Referral));
-      
-      const bookingsSnapshot = await getDocs(query(collection(db, "bookings"), where("referralId", "!=", null)));
-      const bookings = bookingsSnapshot.docs.map(doc => doc.data());
-
-      const stats: Record<string, ReferralStat> = {};
-
-      referrals.forEach(ref => {
-          stats[ref.id] = { referralId: ref.id, name: ref.name, phone: ref.phone, count: 0 };
-      });
-
-      bookings.forEach(booking => {
-        if (booking.referralId && stats[booking.referralId]) {
-          stats[booking.referralId].count++;
-        }
-      });
-      
-      setReferralStats(Object.values(stats));
-    } catch (error) {
-      console.error("Error fetching referral analytics: ", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    const fetchAnalytics = async () => {
+      setLoading(true);
+      try {
+        const referralsSnapshot = await getDocs(collection(db, "referrals"));
+        const referrals = referralsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Referral));
+        
+        const bookingsSnapshot = await getDocs(query(collection(db, "bookings"), where("referralId", "!=", null)));
+        const bookings = bookingsSnapshot.docs.map(doc => doc.data());
+
+        const stats: Record<string, ReferralStat> = {};
+
+        referrals.forEach(ref => {
+            stats[ref.id] = { referralId: ref.id, name: ref.name, phone: ref.phone, count: 0 };
+        });
+
+        bookings.forEach(booking => {
+          if (booking.referralId && stats[booking.referralId]) {
+            stats[booking.referralId].count++;
+          }
+        });
+        
+        setReferralStats(Object.values(stats));
+      } catch (error) {
+        console.error("Error fetching referral analytics: ", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchAnalytics();
   }, []);
 

@@ -30,31 +30,31 @@ export default function PaidBookingsTab() {
   const [selectedRoute, setSelectedRoute] = useState<string>("all");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
 
-  const fetchPrerequisites = async () => {
-    try {
-        const routesSnapshot = await getDocs(collection(db, "routes"));
-        const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
-        setRoutes(routesList);
-    } catch (error) {
-        console.error("Error fetching routes:", error);
-    }
-  };
-
-  const fetchBookings = async () => {
-    setLoading(true);
-    try {
-      const q = query(collection(db, "bookings"), where("status", "==", "paid"));
-      const querySnapshot = await getDocs(q);
-      const bookingsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setBookings(bookingsList);
-    } catch (error) {
-      console.error("Error fetching paid bookings: ", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
   useEffect(() => {
+    const fetchPrerequisites = async () => {
+      try {
+          const routesSnapshot = await getDocs(collection(db, "routes"));
+          const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
+          setRoutes(routesList);
+      } catch (error) {
+          console.error("Error fetching routes:", error);
+      }
+    };
+
+    const fetchBookings = async () => {
+      setLoading(true);
+      try {
+        const q = query(collection(db, "bookings"), where("status", "==", "paid"));
+        const querySnapshot = await getDocs(q);
+        const bookingsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setBookings(bookingsList);
+      } catch (error) {
+        console.error("Error fetching paid bookings: ", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
     fetchPrerequisites();
     fetchBookings();
   }, []);

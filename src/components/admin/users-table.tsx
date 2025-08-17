@@ -71,7 +71,7 @@ export default function UsersTable() {
 
     useEffect(() => {
         fetchUsers();
-    }, [toast]);
+    }, []);
 
     const onSubmit = async (values: AdminFormValues) => {
         setIsSubmitting(true);
