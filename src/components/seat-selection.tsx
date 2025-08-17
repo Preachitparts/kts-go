@@ -11,7 +11,7 @@ interface SeatSelectionProps {
   selectedSeats: string[];
   occupiedSeats: string[];
   isLoading: boolean;
-  onSeatsChange: (seats: string[]) => void;
+  onSeatsChange: (seats: string | string[]) => void;
 }
 
 const SteeringWheelIcon = () => (
@@ -36,11 +36,10 @@ const Seat = ({ seatNumber, isSelected, onSelect, isOccupied }: { seatNumber: st
       size="icon"
       className={cn(
         "h-8 w-8 text-xs font-semibold",
-        isOccupied && "cursor-not-allowed bg-red-300 text-white hover:bg-red-300",
+        isOccupied && "cursor-pointer bg-red-300 text-white hover:bg-red-400",
         isSelected && "bg-primary text-primary-foreground"
       )}
-      onClick={() => !isOccupied && onSelect(seatNumber)}
-      disabled={isOccupied}
+      onClick={() => onSelect(seatNumber)}
     >
       {seatNumber}
     </Button>
@@ -55,10 +54,18 @@ export default function SeatSelection({
   onSeatsChange,
 }: SeatSelectionProps) {
   const toggleSeat = (seatNumber: string) => {
+    // If onSeatsChange expects a single seat number for actions (like in admin), pass it directly.
+    // Otherwise, toggle selection for booking form.
+    if (!Array.isArray(selectedSeats)) {
+        (onSeatsChange as (seat: string) => void)(seatNumber);
+        return;
+    }
+
     const newSelectedSeats = selectedSeats.includes(seatNumber)
       ? selectedSeats.filter((s) => s !== seatNumber)
       : [...selectedSeats, seatNumber];
-    onSeatsChange(newSelectedSeats);
+    
+    (onSeatsChange as (seats: string[]) => void)(newSelectedSeats);
   };
 
   const renderSeats = () => {
@@ -94,7 +101,7 @@ export default function SeatSelection({
           <Seat
             key={seatNumber}
             seatNumber={seatNumber}
-            isSelected={selectedSeats.includes(seatNumber)}
+            isSelected={Array.isArray(selectedSeats) && selectedSeats.includes(seatNumber)}
             onSelect={toggleSeat}
             isOccupied={occupiedSeats.includes(seatNumber)}
           />
@@ -121,6 +128,11 @@ export default function SeatSelection({
         
         <div className="flex flex-col gap-2 w-full">
             {renderSeats()}
+        </div>
+        <div className="flex justify-center items-center gap-4 mt-4 text-xs">
+            <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-destructive border"></div> Occupied</div>
+            <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-primary border"></div> Selected</div>
+            <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-background border"></div> Available</div>
         </div>
       </div>
     </div>

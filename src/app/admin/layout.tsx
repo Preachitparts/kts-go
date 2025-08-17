@@ -27,6 +27,7 @@ import {
   HeartHandshake,
   CalendarClock,
   Globe,
+  Armchair,
 } from "lucide-react";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -125,6 +126,14 @@ export default function AdminLayout({
                 <Link href="/admin/sessions">
                   <CalendarClock />
                   Sessions
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+             <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={pathname === '/admin/booked-seats'}>
+                <Link href="/admin/booked-seats">
+                  <Armchair />
+                  Booked Seats
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
