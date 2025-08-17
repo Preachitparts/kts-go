@@ -535,7 +535,7 @@ export default function SessionsTable() {
             <TableBody>
             {Object.keys(groupedSessions).length > 0 ? (
                 Object.entries(groupedSessions).map(([name, sessionsInGroup]) => (
-                    <Collapsible asChild key={name} defaultOpen>
+                    <Collapsible asChild key={name}>
                         <>
                             <TableRow className="bg-muted/20 hover:bg-muted/50">
                                 <TableCell>
