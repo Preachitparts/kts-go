@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PlusCircle, Loader2, Trash2, Pencil, ArrowRightLeft, CheckCircle, Search, MoreHorizontal } from "lucide-react";
+import { PlusCircle, Loader2, Trash2, Pencil, ArrowRightLeft, CheckCircle, Search, MoreHorizontal, Download } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, writeBatch, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -229,6 +229,35 @@ export default function RoutesTable() {
     setIsDialogOpen(true);
   };
 
+  const downloadCSV = () => {
+    const headers = ["Pickup", "Destination", "Region", "Price", "Assigned Buses", "Status"];
+    const csvContent = [
+      headers.join(","),
+      ...filteredRoutes.map(r => 
+        [
+          `"${r.pickup}"`,
+          `"${r.destination}"`,
+          `"${r.regionName}"`,
+          r.price.toFixed(2),
+          r.busIds?.length || 0,
+          r.status ? "Active" : "Inactive"
+        ].join(",")
+      )
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", "routes.csv");
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   if (loading) {
     return <div>Loading routes...</div>;
   }
@@ -259,6 +288,9 @@ export default function RoutesTable() {
             </Select>
         </div>
         <div className="flex justify-end gap-2 w-full sm:w-auto">
+            <Button variant="outline" onClick={downloadCSV}>
+                <Download className="mr-2 h-4 w-4" /> Download CSV
+            </Button>
             <Button variant="outline" onClick={handleActivateAll}>
                 <CheckCircle className="mr-2 h-4 w-4" /> Activate All
             </Button>
@@ -445,3 +477,5 @@ export default function RoutesTable() {
     </>
   );
 }
+
+    

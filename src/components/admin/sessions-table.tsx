@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Calendar as CalendarIcon, PlusCircle, Loader2, Trash2, Pencil, MoreHorizontal, Eye, ChevronDown, ChevronRight } from "lucide-react";
+import { Calendar as CalendarIcon, PlusCircle, Loader2, Trash2, Pencil, MoreHorizontal, Eye, ChevronDown, ChevronRight, Download } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, Timestamp, query, where, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -237,6 +237,34 @@ export default function SessionsTable() {
     setIsDialogOpen(true);
   };
 
+  const downloadCSV = () => {
+    const headers = ["Session Name", "Departure Date", "Route", "Bus", "Status"];
+    const csvContent = [
+      headers.join(","),
+      ...sessions.map(s => 
+        [
+          `"${s.name}"`,
+          format(s.departureDate.toDate(), "PPP"),
+          `"${s.routeName}"`,
+          `"${s.busName}"`,
+          s.departureDate.toDate() > new Date() ? 'Upcoming' : 'Completed'
+        ].join(",")
+      )
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", "sessions.csv");
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   if (loading) {
     return <div>Loading sessions...</div>;
   }
@@ -245,7 +273,7 @@ export default function SessionsTable() {
     <>
       <div className="flex justify-between items-center mb-4">
         <div>
-          {selectedSessions.length > 0 && (
+          {selectedSessions.length > 0 ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive">
@@ -267,162 +295,167 @@ export default function SessionsTable() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-          )}
+          ) : <div></div>}
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openNewSessionDialog}>
-              <PlusCircle className="mr-2 h-4 w-4" /> Create Session(s)
+        <div className="flex gap-2">
+            <Button variant="outline" onClick={downloadCSV}>
+                <Download className="mr-2 h-4 w-4" /> Download CSV
             </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Create New Session(s)</DialogTitle>
-              <DialogDescription>
-                Select routes, buses, and dates to create sessions in bulk.
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4">
-                
-                 {/* Session Name */}
-                 <div className="space-y-2">
-                    <Label htmlFor="name">Session Name</Label>
-                    <Input id="name" {...form.register("name")} placeholder="e.g. Easter Promo" />
-                    {form.formState.errors.name && <p className="text-red-500 text-xs">{form.formState.errors.name.message}</p>}
-                </div>
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+                <Button onClick={openNewSessionDialog}>
+                <PlusCircle className="mr-2 h-4 w-4" /> Create Session(s)
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                <DialogTitle>Create New Session(s)</DialogTitle>
+                <DialogDescription>
+                    Select routes, buses, and dates to create sessions in bulk.
+                </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4">
+                    
+                    {/* Session Name */}
+                    <div className="space-y-2">
+                        <Label htmlFor="name">Session Name</Label>
+                        <Input id="name" {...form.register("name")} placeholder="e.g. Easter Promo" />
+                        {form.formState.errors.name && <p className="text-red-500 text-xs">{form.formState.errors.name.message}</p>}
+                    </div>
 
-                {/* Route Selection */}
-                <div className="space-y-2">
-                    <Label>Routes</Label>
-                    <Controller
-                        name="routeIds"
-                        control={form.control}
-                        render={({ field }) => (
-                            <ScrollArea className="h-32 w-full rounded-md border p-2">
-                                <div className="flex items-center space-x-2 pb-2 border-b mb-2">
-                                    <Checkbox
-                                        id="selectAllRoutes"
-                                        checked={field.value.length === routes.length && routes.length > 0}
-                                        onCheckedChange={(checked) => {
-                                            field.onChange(checked ? routes.map(r => r.id) : []);
-                                        }}
-                                    />
-                                    <Label htmlFor="selectAllRoutes" className="font-bold">Select All Routes</Label>
-                                </div>
-                                {routes.map(route => (
-                                    <div key={route.id} className="flex items-center space-x-2 p-1">
+                    {/* Route Selection */}
+                    <div className="space-y-2">
+                        <Label>Routes</Label>
+                        <Controller
+                            name="routeIds"
+                            control={form.control}
+                            render={({ field }) => (
+                                <ScrollArea className="h-32 w-full rounded-md border p-2">
+                                    <div className="flex items-center space-x-2 pb-2 border-b mb-2">
                                         <Checkbox
-                                            id={`route-${route.id}`}
-                                            checked={field.value.includes(route.id)}
+                                            id="selectAllRoutes"
+                                            checked={field.value.length === routes.length && routes.length > 0}
                                             onCheckedChange={(checked) => {
-                                                const newValue = checked 
-                                                    ? [...field.value, route.id] 
-                                                    : field.value.filter(id => id !== route.id);
-                                                field.onChange(newValue);
+                                                field.onChange(checked ? routes.map(r => r.id) : []);
                                             }}
                                         />
-                                        <Label htmlFor={`route-${route.id}`}>{`${route.pickup} - ${route.destination}`}</Label>
+                                        <Label htmlFor="selectAllRoutes" className="font-bold">Select All Routes</Label>
                                     </div>
-                                ))}
-                            </ScrollArea>
-                        )}
-                    />
-                    {form.formState.errors.routeIds && <p className="text-red-500 text-xs">{form.formState.errors.routeIds.message}</p>}
-                </div>
+                                    {routes.map(route => (
+                                        <div key={route.id} className="flex items-center space-x-2 p-1">
+                                            <Checkbox
+                                                id={`route-${route.id}`}
+                                                checked={field.value.includes(route.id)}
+                                                onCheckedChange={(checked) => {
+                                                    const newValue = checked 
+                                                        ? [...field.value, route.id] 
+                                                        : field.value.filter(id => id !== route.id);
+                                                    field.onChange(newValue);
+                                                }}
+                                            />
+                                            <Label htmlFor={`route-${route.id}`}>{`${route.pickup} - ${route.destination}`}</Label>
+                                        </div>
+                                    ))}
+                                </ScrollArea>
+                            )}
+                        />
+                        {form.formState.errors.routeIds && <p className="text-red-500 text-xs">{form.formState.errors.routeIds.message}</p>}
+                    </div>
 
-                {/* Bus Selection */}
-                <div className="space-y-2">
-                    <Label>Buses</Label>
-                    <Controller
-                        name="busIds"
-                        control={form.control}
-                        render={({ field }) => (
-                            <ScrollArea className="h-32 w-full rounded-md border p-2">
-                                <div className="flex items-center space-x-2 pb-2 border-b mb-2">
-                                    <Checkbox
-                                        id="selectAllBuses"
-                                        checked={field.value.length === buses.length && buses.length > 0}
-                                        onCheckedChange={(checked) => {
-                                            field.onChange(checked ? buses.map(b => b.id) : []);
-                                        }}
-                                    />
-                                    <Label htmlFor="selectAllBuses" className="font-bold">Select All Buses</Label>
-                                </div>
-                                {buses.map(bus => (
-                                    <div key={bus.id} className="flex items-center space-x-2 p-1">
+                    {/* Bus Selection */}
+                    <div className="space-y-2">
+                        <Label>Buses</Label>
+                        <Controller
+                            name="busIds"
+                            control={form.control}
+                            render={({ field }) => (
+                                <ScrollArea className="h-32 w-full rounded-md border p-2">
+                                    <div className="flex items-center space-x-2 pb-2 border-b mb-2">
                                         <Checkbox
-                                            id={`bus-${bus.id}`}
-                                            checked={field.value.includes(bus.id)}
+                                            id="selectAllBuses"
+                                            checked={field.value.length === buses.length && buses.length > 0}
                                             onCheckedChange={(checked) => {
-                                                const newValue = checked 
-                                                    ? [...field.value, bus.id] 
-                                                    : field.value.filter(id => id !== bus.id);
-                                                field.onChange(newValue);
+                                                field.onChange(checked ? buses.map(b => b.id) : []);
                                             }}
                                         />
-                                        <Label htmlFor={`bus-${bus.id}`}>{`${bus.numberPlate} (${bus.capacity} seats)`}</Label>
+                                        <Label htmlFor="selectAllBuses" className="font-bold">Select All Buses</Label>
                                     </div>
-                                ))}
-                            </ScrollArea>
+                                    {buses.map(bus => (
+                                        <div key={bus.id} className="flex items-center space-x-2 p-1">
+                                            <Checkbox
+                                                id={`bus-${bus.id}`}
+                                                checked={field.value.includes(bus.id)}
+                                                onCheckedChange={(checked) => {
+                                                    const newValue = checked 
+                                                        ? [...field.value, bus.id] 
+                                                        : field.value.filter(id => id !== bus.id);
+                                                    field.onChange(newValue);
+                                                }}
+                                            />
+                                            <Label htmlFor={`bus-${bus.id}`}>{`${bus.numberPlate} (${bus.capacity} seats)`}</Label>
+                                        </div>
+                                    ))}
+                                </ScrollArea>
+                            )}
+                        />
+                        {form.formState.errors.busIds && <p className="text-red-500 text-xs">{form.formState.errors.busIds.message}</p>}
+                    </div>
+
+                    {/* Date Selection */}
+                    <div className="space-y-2">
+                        <Label>Departure Dates (up to 10)</Label>
+                        <Controller
+                        name="departureDates"
+                        control={form.control}
+                        render={({ field }) => (
+                            <Popover>
+                            <PopoverTrigger asChild>
+                                <Button
+                                variant={"outline"}
+                                className={cn(
+                                    "w-full justify-start text-left font-normal h-auto",
+                                    !field.value?.length && "text-muted-foreground"
+                                )}
+                                >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {field.value?.length ? (
+                                    <div className="flex flex-wrap gap-1">
+                                    {field.value.map(date => (
+                                        <Badge key={date.toString()} variant="secondary">{format(date, "MMM d")}</Badge>
+                                    ))}
+                                    </div>
+                                ) : (
+                                    <span>Pick date(s)</span>
+                                )}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                                <Calendar
+                                mode="multiple"
+                                selected={field.value}
+                                onSelect={field.onChange}
+                                disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                                initialFocus
+                                max={10}
+                                />
+                            </PopoverContent>
+                            </Popover>
                         )}
-                    />
-                    {form.formState.errors.busIds && <p className="text-red-500 text-xs">{form.formState.errors.busIds.message}</p>}
-                </div>
-
-                {/* Date Selection */}
-                 <div className="space-y-2">
-                    <Label>Departure Dates (up to 10)</Label>
-                    <Controller
-                      name="departureDates"
-                      control={form.control}
-                      render={({ field }) => (
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant={"outline"}
-                              className={cn(
-                                "w-full justify-start text-left font-normal h-auto",
-                                !field.value?.length && "text-muted-foreground"
-                              )}
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {field.value?.length ? (
-                                <div className="flex flex-wrap gap-1">
-                                  {field.value.map(date => (
-                                    <Badge key={date.toString()} variant="secondary">{format(date, "MMM d")}</Badge>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span>Pick date(s)</span>
-                              )}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0">
-                            <Calendar
-                              mode="multiple"
-                              selected={field.value}
-                              onSelect={field.onChange}
-                              disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                              initialFocus
-                              max={10}
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      )}
-                    />
-                    {form.formState.errors.departureDates && <p className="text-red-500 text-xs">{form.formState.errors.departureDates.message}</p>}
-                </div>
+                        />
+                        {form.formState.errors.departureDates && <p className="text-red-500 text-xs">{form.formState.errors.departureDates.message}</p>}
+                    </div>
 
 
-                <DialogFooter>
-                    <Button type="submit" disabled={isSubmitting}>
-                        {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Create Session(s)
-                    </Button>
-                </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+                    <DialogFooter>
+                        <Button type="submit" disabled={isSubmitting}>
+                            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Create Session(s)
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+            </Dialog>
+        </div>
       </div>
        <div className="border rounded-md">
         <Table>
@@ -625,3 +658,5 @@ export default function SessionsTable() {
     </>
   );
 }
+
+    

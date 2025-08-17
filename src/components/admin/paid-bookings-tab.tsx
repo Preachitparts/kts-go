@@ -11,15 +11,18 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, query, where, Timestamp } from "firebase/firestore";
+import { collection, getDocs, query, where, Timestamp, doc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Button } from "../ui/button";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, Download, Trash2 } from "lucide-react";
 import { Calendar } from "../ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "../ui/alert-dialog";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 
 type Route = { id: string; pickup: string; destination: string; };
 
@@ -29,6 +32,35 @@ export default function PaidBookingsTab() {
   const [routes, setRoutes] = useState<Route[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<string>("all");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const { toast } = useToast();
+  const auth = getAuth();
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            const idTokenResult = await user.getIdTokenResult();
+            setUserRole(idTokenResult.claims.role as string || 'Admin');
+        } else {
+            setUserRole(null);
+        }
+    });
+    return () => unsubscribe();
+  }, [auth]);
+
+  const fetchBookings = async () => {
+    setLoading(true);
+    try {
+      const q = query(collection(db, "bookings"), where("status", "==", "paid"));
+      const querySnapshot = await getDocs(q);
+      const bookingsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setBookings(bookingsList);
+    } catch (error) {
+      console.error("Error fetching paid bookings: ", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const fetchPrerequisites = async () => {
@@ -40,24 +72,25 @@ export default function PaidBookingsTab() {
           console.error("Error fetching routes:", error);
       }
     };
-
-    const fetchBookings = async () => {
-      setLoading(true);
-      try {
-        const q = query(collection(db, "bookings"), where("status", "==", "paid"));
-        const querySnapshot = await getDocs(q);
-        const bookingsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setBookings(bookingsList);
-      } catch (error) {
-        console.error("Error fetching paid bookings: ", error);
-      } finally {
-        setLoading(false);
-      }
-    };
     
     fetchPrerequisites();
     fetchBookings();
   }, []);
+
+  const handleDelete = async (bookingId: string) => {
+    if (userRole !== 'Super-Admin') {
+        toast({ variant: "destructive", title: "Unauthorized", description: "You do not have permission to delete bookings." });
+        return;
+    }
+    try {
+        await deleteDoc(doc(db, "bookings", bookingId));
+        toast({ title: "Success", description: "Booking permanently deleted." });
+        fetchBookings();
+    } catch (error) {
+        console.error("Error deleting booking:", error);
+        toast({ variant: "destructive", title: "Error", description: "Failed to delete booking." });
+    }
+  };
 
   const filteredBookings = useMemo(() => {
     return bookings.filter(booking => {
@@ -74,41 +107,76 @@ export default function PaidBookingsTab() {
     return format(dateObj, "PPP");
   };
 
+  const downloadCSV = () => {
+    const headers = ["Ticket Number", "Passenger", "Route", "Date", "Seats", "Amount", "Status"];
+    const csvContent = [
+      headers.join(","),
+      ...filteredBookings.map(b => 
+        [
+          b.ticketNumber,
+          `"${b.name}"`,
+          `"${b.pickup} - ${b.destination}"`,
+          formatDate(b.date),
+          `"${Array.isArray(b.seats) ? b.seats.join(';') : b.seats}"`,
+          b.totalAmount.toFixed(2),
+          "Paid"
+        ].join(",")
+      )
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", "paid-bookings.csv");
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   if (loading) {
     return <div>Loading bookings...</div>;
   }
 
   return (
     <div>
-        <div className="flex gap-4 mb-4">
-            <Select value={selectedRoute} onValueChange={setSelectedRoute}>
-                <SelectTrigger className="w-[280px]">
-                    <SelectValue placeholder="Filter by route..." />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">All Routes</SelectItem>
-                    {routes.map(route => (
-                        <SelectItem key={route.id} value={route.id}>{`${route.pickup} - ${route.destination}`}</SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-            <Popover>
-                <PopoverTrigger asChild>
-                    <Button
-                        variant={"outline"}
-                        className={cn("w-[280px] justify-start text-left font-normal", !selectedDate && "text-muted-foreground")}
-                    >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {selectedDate ? format(selectedDate, "PPP") : <span>Filter by departure date...</span>}
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                    <Calendar mode="single" selected={selectedDate} onSelect={setSelectedDate} initialFocus />
-                </PopoverContent>
-            </Popover>
-             { (selectedRoute !== 'all' || selectedDate) &&
-                <Button variant="ghost" onClick={() => {setSelectedRoute("all"); setSelectedDate(undefined)}}>Clear Filters</Button>
-             }
+        <div className="flex justify-between items-center mb-4">
+            <div className="flex gap-4">
+                <Select value={selectedRoute} onValueChange={setSelectedRoute}>
+                    <SelectTrigger className="w-[280px]">
+                        <SelectValue placeholder="Filter by route..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All Routes</SelectItem>
+                        {routes.map(route => (
+                            <SelectItem key={route.id} value={route.id}>{`${route.pickup} - ${route.destination}`}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button
+                            variant={"outline"}
+                            className={cn("w-[280px] justify-start text-left font-normal", !selectedDate && "text-muted-foreground")}
+                        >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {selectedDate ? format(selectedDate, "PPP") : <span>Filter by departure date...</span>}
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                        <Calendar mode="single" selected={selectedDate} onSelect={setSelectedDate} initialFocus />
+                    </PopoverContent>
+                </Popover>
+                { (selectedRoute !== 'all' || selectedDate) &&
+                    <Button variant="ghost" onClick={() => {setSelectedRoute("all"); setSelectedDate(undefined)}}>Clear Filters</Button>
+                }
+            </div>
+            <Button variant="outline" onClick={downloadCSV}>
+                <Download className="mr-2 h-4 w-4" /> Download CSV
+            </Button>
         </div>
         <Table>
         <TableHeader>
@@ -119,6 +187,7 @@ export default function PaidBookingsTab() {
             <TableHead>Date</TableHead>
             <TableHead>Amount (GH₵)</TableHead>
             <TableHead>Status</TableHead>
+            {userRole === 'Super-Admin' && <TableHead className="text-right">Actions</TableHead>}
             </TableRow>
         </TableHeader>
         <TableBody>
@@ -132,6 +201,29 @@ export default function PaidBookingsTab() {
                 <TableCell>
                     <Badge className="bg-green-500">Paid</Badge>
                 </TableCell>
+                {userRole === 'Super-Admin' && (
+                    <TableCell className="text-right">
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="destructive" size="icon">
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        This action cannot be undone. This will permanently delete this booking.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDelete(booking.id)}>Delete</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    </TableCell>
+                )}
             </TableRow>
             ))}
         </TableBody>
@@ -139,3 +231,5 @@ export default function PaidBookingsTab() {
     </div>
   );
 }
+
+    

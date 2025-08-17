@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PlusCircle, Loader2, Trash2, Pencil, Search } from "lucide-react";
+import { PlusCircle, Loader2, Trash2, Pencil, Search, Download } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -121,6 +121,31 @@ export default function ManageReferralsTab() {
     form.reset({ name: "", phone: "" });
     setIsDialogOpen(true);
   };
+  
+  const downloadCSV = () => {
+    const headers = ["Name", "Phone"];
+    const csvContent = [
+      headers.join(","),
+      ...filteredReferrals.map(r => 
+        [
+          `"${r.name}"`,
+          `"${r.phone}"`
+        ].join(",")
+      )
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", "referrals.csv");
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
 
   if (loading) {
     return <div>Loading referrals...</div>;
@@ -138,39 +163,44 @@ export default function ManageReferralsTab() {
           />
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openNewReferralDialog}>
-              <PlusCircle className="mr-2 h-4 w-4" /> Add Referral
+        <div className="flex gap-2">
+            <Button variant="outline" onClick={downloadCSV}>
+                <Download className="mr-2 h-4 w-4" /> Download CSV
             </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>{editingReferral ? "Edit Referral" : "Add New Referral"}</DialogTitle>
-              <DialogDescription>
-                {editingReferral ? "Update the details for this referral partner." : "Add a new referral partner to the system."}
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="name" className="text-right">Name</Label>
-                    <Input id="name" {...form.register("name")} className="col-span-3" />
-                    {form.formState.errors.name && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.name.message}</p>}
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="phone" className="text-right">Phone</Label>
-                    <Input id="phone" {...form.register("phone")} className="col-span-3" />
-                    {form.formState.errors.phone && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.phone.message}</p>}
-                </div>
-                <DialogFooter>
-                    <Button type="submit" disabled={isSubmitting}>
-                        {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {editingReferral ? "Save Changes" : "Add Referral"}
-                    </Button>
-                </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+                <Button onClick={openNewReferralDialog}>
+                <PlusCircle className="mr-2 h-4 w-4" /> Add Referral
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                <DialogTitle>{editingReferral ? "Edit Referral" : "Add New Referral"}</DialogTitle>
+                <DialogDescription>
+                    {editingReferral ? "Update the details for this referral partner." : "Add a new referral partner to the system."}
+                </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="name" className="text-right">Name</Label>
+                        <Input id="name" {...form.register("name")} className="col-span-3" />
+                        {form.formState.errors.name && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.name.message}</p>}
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="phone" className="text-right">Phone</Label>
+                        <Input id="phone" {...form.register("phone")} className="col-span-3" />
+                        {form.formState.errors.phone && <p className="col-span-4 text-red-500 text-xs text-right">{form.formState.errors.phone.message}</p>}
+                    </div>
+                    <DialogFooter>
+                        <Button type="submit" disabled={isSubmitting}>
+                            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {editingReferral ? "Save Changes" : "Add Referral"}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+            </Dialog>
+        </div>
       </div>
       <Table>
         <TableHeader>
@@ -218,3 +248,5 @@ export default function ManageReferralsTab() {
     </>
   );
 }
+
+    
