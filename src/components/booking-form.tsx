@@ -8,7 +8,7 @@ import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import React from "react";
-import { collection, getDocs, query, where, doc, writeBatch, Timestamp, addDoc } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, writeBatch, Timestamp, addDoc, serverTimestamp } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -260,41 +260,70 @@ export function BookingForm() {
         return;
     }
     setIsSubmitting(true);
+    let pendingBookingId = "";
     try {
-      const bookingDetails = {
-        name: values.name,
-        phone: values.phone,
-        emergencyContact: values.emergencyContact,
-        date: values.date.toISOString(),
-        seats: values.selectedSeats,
-        pickup: selectedRoute.pickup,
-        destination: selectedRoute.destination,
-        busType: `${selectedBus.numberPlate} - ${selectedBus.capacity} Seater`,
-        totalAmount,
-        routeId: values.routeId,
-        busId: values.busId,
-        referralCode: values.referralCode === "none" ? undefined : values.referralCode,
-      };
+        // Step 1: Create pending booking on the client
+        const ticketNumber = `KTS${Date.now()}`;
+        const referral = referrals.find(r => r.phone === values.referralCode);
 
-      const response = await fetch('/api/initiate-payment', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(bookingDetails)
-      });
+        const pendingBookingData = {
+            name: values.name,
+            phone: values.phone,
+            emergencyContact: values.emergencyContact,
+            date: Timestamp.fromDate(values.date),
+            seats: values.selectedSeats,
+            pickup: selectedRoute.pickup,
+            destination: selectedRoute.destination,
+            busType: `${selectedBus.numberPlate} (${selectedBus.capacity} Seater)`,
+            totalAmount: totalAmount,
+            routeId: values.routeId,
+            busId: values.busId,
+            referralId: referral ? referral.id : null,
+            ticketNumber: ticketNumber,
+            status: "pending",
+            createdAt: serverTimestamp(),
+        };
+        
+        const pendingDocRef = await addDoc(collection(db, "pending_bookings"), pendingBookingData);
+        pendingBookingId = pendingDocRef.id;
+
+        // Step 2: Call API to initiate payment with Hubtel
+        const response = await fetch('/api/initiate-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                totalAmount: totalAmount,
+                description: `KTS Go Ticket - ${ticketNumber}`,
+                clientReference: pendingDocRef.id,
+                phone: values.phone,
+            })
+        });
       
-      const data = await response.json();
+        const data = await response.json();
 
-      if (response.ok && data.success && data.paymentUrl) {
-          router.push(data.paymentUrl);
-      } else {
-          throw new Error(data.error || 'Failed to initiate payment.');
-      }
+        if (response.ok && data.success && data.paymentUrl) {
+            router.push(data.paymentUrl);
+        } else {
+            throw new Error(data.error || 'Failed to initiate payment.');
+        }
 
     } catch (error: any) {
-      console.error("Error initiating payment:", error);
+      console.error("Error during booking process:", error);
+      // If payment initiation fails, try to clean up the pending booking
+      if (pendingBookingId) {
+          const batch = writeBatch(db);
+          const pendingDocRef = doc(db, "pending_bookings", pendingBookingId);
+          const rejectedDocRef = doc(collection(db, "rejected_bookings"));
+          const bookingData = (await getDoc(pendingDocRef)).data();
+          if (bookingData) {
+              batch.set(rejectedDocRef, {...bookingData, rejectionReason: "Payment initiation failed"});
+              batch.delete(pendingDocRef);
+              await batch.commit();
+          }
+      }
       toast({
         variant: "destructive",
-        title: "Payment Failed",
+        title: "Booking Failed",
         description: error.message || "Something went wrong. Please try again.",
       });
     } finally {

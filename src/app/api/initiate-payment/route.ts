@@ -1,32 +1,53 @@
 
 // /app/api/initiate-payment/route.ts
+import { doc, getDoc } from "firebase/firestore";
 import { NextResponse } from "next/server";
-import { db } from "@/lib/firebase"; // your Firestore init
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
+async function getHubtelKeys() {
+    const settingsDoc = await getDoc(doc(db, "settings", "hubtel"));
+    if (!settingsDoc.exists()) {
+        throw new Error("Hubtel settings not found.");
+    }
+    const settings = settingsDoc.data();
+
+    if (settings.liveMode) {
+        return {
+            clientId: settings.clientId,
+            secretKey: settings.secretKey,
+            accountId: settings.accountId,
+        };
+    } else {
+         return {
+            clientId: settings.testClientId,
+            secretKey: settings.testSecretKey,
+            accountId: settings.testAccountId,
+        };
+    }
+}
+
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { userId, seatId, amount, phoneNumber } = body;
+    const { totalAmount, description, clientReference, phone } = body;
 
-    if (!userId || !seatId || !amount || !phoneNumber) {
+    if (!totalAmount || !description || !clientReference || !phone) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { success: false, error: "Missing required payment fields" },
         { status: 400 }
       );
     }
 
-    // Step 1: Write booking to Firestore as "pending"
-    const bookingRef = await addDoc(collection(db, "bookings"), {
-      userId,
-      seatId,
-      amount,
-      phoneNumber,
-      status: "pending",
-      createdAt: serverTimestamp(),
-    });
+    const hubtelKeys = await getHubtelKeys();
+    if (!hubtelKeys.clientId || !hubtelKeys.secretKey || !hubtelKeys.accountId) {
+        return NextResponse.json(
+            { success: false, error: "Hubtel API keys are not configured in settings." },
+            { status: 500 }
+        );
+    }
 
-    // Step 2: Call Hubtel Payment API
+    // Call Hubtel Payment API
     const hubtelRes = await fetch("https://payproxyapi.hubtel.com/items/initiate", {
       method: "POST",
       headers: {
@@ -34,41 +55,42 @@ export async function POST(req: Request) {
         Authorization:
           "Basic " +
           Buffer.from(
-            process.env.HUBTEL_CLIENT_ID + ":" + process.env.HUBTEL_CLIENT_SECRET
+            hubtelKeys.clientId + ":" + hubtelKeys.secretKey
           ).toString("base64"),
       },
       body: JSON.stringify({
-        totalAmount: amount,
-        description: `Seat Booking - ${seatId}`,
+        totalAmount: totalAmount,
+        description: description,
         callbackUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/api/payment-callback`,
-        returnUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/payment-success`,
-        cancellationUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/payment-cancelled`,
-        merchantAccountNumber: process.env.HUBTEL_ACCOUNT_NUMBER,
-        clientReference: bookingRef.id, // use Firestore booking ID
-        customerMsisdn: phoneNumber,
-        paymentMethod: "momo",
+        returnUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/api/payment-callback`,
+        cancellationUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/`,
+        merchantAccountNumber: hubtelKeys.accountId,
+        clientReference: clientReference,
+        customerMsisdn: phone,
       }),
     });
 
     const hubtelData = await hubtelRes.json();
 
-    if (!hubtelRes.ok) {
+    if (!hubtelRes.ok || hubtelData.status !== "Success") {
+      console.error("Hubtel Error:", hubtelData);
       return NextResponse.json(
-        { error: "Hubtel payment initiation failed", details: hubtelData },
+        { success: false, error: "Hubtel payment initiation failed", details: hubtelData.message || hubtelData },
         { status: 500 }
       );
     }
 
-    // Step 3: Return payment link to frontend
+    // Return payment link to frontend
     return NextResponse.json({
-      bookingId: bookingRef.id,
+      success: true,
       paymentUrl: hubtelData.data.checkoutUrl,
     });
   } catch (err: any) {
     console.error("Payment initiation error:", err);
     return NextResponse.json(
-      { error: "Internal Server Error", details: err.message },
+      { success: false, error: "Internal Server Error", details: err.message },
       { status: 500 }
     );
   }
 }
+
