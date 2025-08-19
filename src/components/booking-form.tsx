@@ -8,7 +8,7 @@ import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import React from "react";
-import { collection, getDocs, query, where, doc, writeBatch, Timestamp, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, writeBatch, Timestamp, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -84,6 +84,20 @@ async function releaseExpiredSeats() {
 
     await batch.commit();
     console.log(`Released seats for ${snapshot.size} expired bookings.`);
+}
+
+async function getHubtelSettings() {
+    const settingsDoc = await getDoc(doc(db, "settings", "hubtel"));
+    if (!settingsDoc.exists()) {
+        throw new Error("Hubtel settings not found.");
+    }
+    const settings = settingsDoc.data();
+
+    if (settings.liveMode) {
+        return { accountId: settings.accountId };
+    } else {
+        return { accountId: settings.testAccountId };
+    }
 }
 
 export function BookingForm() {
@@ -262,7 +276,11 @@ export function BookingForm() {
     setIsSubmitting(true);
     let pendingBookingId = "";
     try {
-        // Step 1: Create pending booking on the client
+        const hubtelSettings = await getHubtelSettings();
+        if (!hubtelSettings.accountId) {
+          throw new Error("Hubtel Account ID is not configured in settings.");
+        }
+        
         const ticketNumber = `KTS${Date.now()}`;
         const referral = referrals.find(r => r.phone === values.referralCode);
 
@@ -282,12 +300,16 @@ export function BookingForm() {
             ticketNumber: ticketNumber,
             status: "pending",
             createdAt: serverTimestamp(),
+            clientReference: "",
         };
         
         const pendingDocRef = await addDoc(collection(db, "pending_bookings"), pendingBookingData);
         pendingBookingId = pendingDocRef.id;
 
-        // Step 2: Call API to initiate payment with Hubtel
+        const batch = writeBatch(db);
+        batch.update(pendingDocRef, { clientReference: pendingDocRef.id });
+        await batch.commit();
+
         const response = await fetch('/api/initiate-payment', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -296,6 +318,7 @@ export function BookingForm() {
                 description: `KTS Go Ticket - ${ticketNumber}`,
                 clientReference: pendingDocRef.id,
                 phone: values.phone,
+                accountId: hubtelSettings.accountId,
             })
         });
       
@@ -309,16 +332,16 @@ export function BookingForm() {
 
     } catch (error: any) {
       console.error("Error during booking process:", error);
-      // If payment initiation fails, try to clean up the pending booking
       if (pendingBookingId) {
-          const batch = writeBatch(db);
           const pendingDocRef = doc(db, "pending_bookings", pendingBookingId);
           const rejectedDocRef = doc(collection(db, "rejected_bookings"));
-          const bookingData = (await getDoc(pendingDocRef)).data();
-          if (bookingData) {
-              batch.set(rejectedDocRef, {...bookingData, rejectionReason: "Payment initiation failed"});
-              batch.delete(pendingDocRef);
-              await batch.commit();
+          const bookingSnapshot = await getDoc(pendingDocRef);
+          if (bookingSnapshot.exists()) {
+            const bookingData = bookingSnapshot.data();
+            const batch = writeBatch(db);
+            batch.set(rejectedDocRef, {...bookingData, rejectionReason: "Payment initiation failed"});
+            batch.delete(pendingDocRef);
+            await batch.commit();
           }
       }
       toast({

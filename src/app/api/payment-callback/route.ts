@@ -1,6 +1,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { doc, collection, addDoc, setDoc, deleteDoc, query, where, getDocs } from "firebase/firestore";
+import { doc, collection, addDoc, setDoc, deleteDoc, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 export async function POST(req: NextRequest) {
@@ -19,17 +19,15 @@ export async function POST(req: NextRequest) {
         }
 
         // Find the pending booking using the clientReference
-        const pendingBookingsQuery = query(collection(db, "pending_bookings"), where("clientReference", "==", clientReference));
-        const pendingBookingsSnapshot = await getDocs(pendingBookingsQuery);
+        const pendingBookingRef = doc(db, "pending_bookings", clientReference);
+        const pendingBookingDoc = await getDoc(pendingBookingRef);
 
-        if (pendingBookingsSnapshot.empty) {
+
+        if (!pendingBookingDoc.exists()) {
             console.warn(`Callback Warning: Pending booking not found for ClientReference: ${clientReference}. It might have already been processed.`);
             // Acknowledge receipt to Hubtel even if we can't find the booking
             return NextResponse.json({ message: "Acknowledged: Booking not found or already processed." });
         }
-        
-        const pendingBookingDoc = pendingBookingsSnapshot.docs[0];
-        const pendingBookingRef = pendingBookingDoc.ref;
         
         if (Status === "Success" && ResponseCode === "0000") {
             const bookingDetails = pendingBookingDoc.data();
@@ -83,7 +81,7 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
-    const clientReference = searchParams.get('clientreference');
+    const clientReference = searchParams.get('ref');
 
     if (clientReference) {
         const confirmationUrl = new URL('/booking-confirmation', req.url);
