@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, query, where, Timestamp, doc, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, query, where, Timestamp, doc, deleteDoc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Button } from "../ui/button";
@@ -22,7 +22,7 @@ import { Calendar } from "../ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "../ui/alert-dialog";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 
 type Route = { id: string; pickup: string; destination: string; };
 
@@ -32,6 +32,7 @@ export default function PaidBookingsTab() {
   const [routes, setRoutes] = useState<Route[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<string>("all");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const { toast } = useToast();
   const auth = getAuth();
@@ -39,9 +40,15 @@ export default function PaidBookingsTab() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
         if (user) {
-            const idTokenResult = await user.getIdTokenResult();
-            setUserRole(idTokenResult.claims.role as string || 'Admin');
+            setUser(user);
+            const userDoc = await getDoc(doc(db, "users", user.uid));
+            if (userDoc.exists()) {
+                setUserRole(userDoc.data().role);
+            } else {
+                setUserRole('Admin'); // Default role if not found
+            }
         } else {
+            setUser(null);
             setUserRole(null);
         }
     });
@@ -57,6 +64,7 @@ export default function PaidBookingsTab() {
       setBookings(bookingsList);
     } catch (error) {
       console.error("Error fetching paid bookings: ", error);
+      toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch paid bookings.'})
     } finally {
       setLoading(false);
     }
@@ -74,8 +82,12 @@ export default function PaidBookingsTab() {
     };
     
     fetchPrerequisites();
-    fetchBookings();
-  }, []);
+    if(user) { // Only fetch bookings if user is authenticated
+        fetchBookings();
+    } else {
+        setLoading(false); // If no user, stop loading
+    }
+  }, [user]);
 
   const handleDelete = async (bookingId: string) => {
     if (userRole !== 'Super-Admin') {
@@ -139,6 +151,10 @@ export default function PaidBookingsTab() {
 
   if (loading) {
     return <div>Loading bookings...</div>;
+  }
+  
+  if (!user) {
+    return <div>Please log in to view paid bookings.</div>;
   }
 
   return (
@@ -231,5 +247,3 @@ export default function PaidBookingsTab() {
     </div>
   );
 }
-
-    
