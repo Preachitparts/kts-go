@@ -1,28 +1,41 @@
-
-// /app/api/initiate-payment/route.ts
 import { NextResponse } from "next/server";
+import { adminDb } from "@/lib/firebase-admin";
 
-// Using temporary hardcoded credentials on the server-side as a placeholder.
-// In a real production app, these should come from secure environment variables
-// and the settings should be fetched securely on the server using the Admin SDK.
-const HUBTEL_CLIENT_ID = "vDz5mM0";
-const HUBTEL_SECRET_KEY = "d911cb1a8d7c46a1bae83f3ba803c787";
+async function getHubtelSettings() {
+    const settingsDoc = await adminDb.collection("settings").doc("hubtel").get();
+    if (!settingsDoc.exists) {
+        throw new Error("Hubtel settings not found in Firestore.");
+    }
+    return settingsDoc.data();
+}
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { totalAmount, description, clientReference, phone, accountId } = body;
+    const { totalAmount, description, clientReference, phone } = body;
 
-    if (!totalAmount || !description || !clientReference || !phone || !accountId) {
+    if (!totalAmount || !description || !clientReference || !phone) {
       return NextResponse.json(
         { success: false, error: "Missing required payment fields" },
         { status: 400 }
       );
     }
 
-    if (!HUBTEL_CLIENT_ID || !HUBTEL_SECRET_KEY) {
+    const settings = await getHubtelSettings();
+    if (!settings) {
+         return NextResponse.json(
+            { success: false, error: "Hubtel settings could not be loaded from the server." },
+            { status: 500 }
+        );
+    }
+
+    const clientId = settings.liveMode ? settings.clientId : settings.testClientId;
+    const secretKey = settings.liveMode ? settings.secretKey : settings.testSecretKey;
+    const accountNumber = settings.liveMode ? settings.accountId : settings.testAccountId;
+
+    if (!clientId || !secretKey || !accountNumber) {
         return NextResponse.json(
-            { success: false, error: "Hubtel API keys are not configured on the server." },
+            { success: false, error: "Hubtel API keys are not configured correctly in the admin settings." },
             { status: 500 }
         );
     }
@@ -32,11 +45,7 @@ export async function POST(req: Request) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization:
-          "Basic " +
-          Buffer.from(
-            HUBTEL_CLIENT_ID + ":" + HUBTEL_SECRET_KEY
-          ).toString("base64"),
+        Authorization: "Basic " + Buffer.from(clientId + ":" + secretKey).toString("base64"),
       },
       body: JSON.stringify({
         totalAmount: totalAmount,
@@ -44,7 +53,7 @@ export async function POST(req: Request) {
         callbackUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/api/payment-callback`,
         returnUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/booking-confirmation?ref=${clientReference}`,
         cancellationUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/?error=payment_failed`,
-        merchantAccountNumber: accountId,
+        merchantAccountNumber: accountNumber,
         clientReference: clientReference,
         customerMsisdn: phone,
       }),
@@ -73,3 +82,5 @@ export async function POST(req: Request) {
     );
   }
 }
+
+    

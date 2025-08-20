@@ -1,50 +1,11 @@
-
 import { NextRequest, NextResponse } from "next/server";
-import * as admin from "firebase-admin";
+import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { config } from 'dotenv';
 
 // Load environment variables from .env file
 config();
 
-// Function to initialize Firebase Admin SDK
-function initializeFirebaseAdmin() {
-    if (admin.apps.length > 0) {
-        return; // Already initialized
-    }
-
-    try {
-        const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-
-        if (!serviceAccountString || serviceAccountString.trim() === '') {
-            console.error("Firebase Admin SDK Error: FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set or empty.");
-            throw new Error("Server configuration error: Missing Firebase credentials.");
-        }
-        
-        const serviceAccount = JSON.parse(serviceAccountString);
-
-        admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount)
-        });
-
-        console.log("Firebase Admin SDK initialized successfully.");
-
-    } catch (error: any) {
-        if (error instanceof SyntaxError) {
-             console.error("Firebase Admin SDK Error: Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY. The JSON is malformed.", error.message);
-        } else {
-             console.error("Firebase Admin SDK Error: Initialization failed.", error.message);
-        }
-        // Do not proceed if initialization fails. The error will be handled by the check below.
-    }
-}
-
 export async function POST(req: NextRequest) {
-    initializeFirebaseAdmin();
-
-    if (!admin.apps.length) {
-        return NextResponse.json({ error: 'Firebase Admin SDK could not be initialized. Check server logs for details.' }, { status: 500 });
-    }
-
     try {
         const { email, password, name, role } = await req.json();
 
@@ -53,15 +14,14 @@ export async function POST(req: NextRequest) {
         }
 
         // Create user in Firebase Authentication
-        const userRecord = await admin.auth().createUser({
+        const userRecord = await adminAuth.createUser({
             email,
             password,
             displayName: name,
         });
 
         // Add user details to Firestore
-        const db = admin.firestore();
-        await db.collection("users").doc(userRecord.uid).set({
+        await adminDb.collection("users").doc(userRecord.uid).set({
             name,
             email,
             role,
@@ -83,3 +43,5 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
 }
+
+    

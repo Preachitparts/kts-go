@@ -86,20 +86,6 @@ async function releaseExpiredSeats() {
     console.log(`Released seats for ${snapshot.size} expired bookings.`);
 }
 
-async function getHubtelSettings() {
-    const settingsDoc = await getDoc(doc(db, "settings", "hubtel"));
-    if (!settingsDoc.exists()) {
-        throw new Error("Hubtel settings not found.");
-    }
-    const settings = settingsDoc.data();
-
-    if (settings.liveMode) {
-        return { accountId: settings.accountId };
-    } else {
-        return { accountId: settings.testAccountId };
-    }
-}
-
 export function BookingForm() {
   const router = useRouter();
   const { toast } = useToast();
@@ -276,11 +262,6 @@ export function BookingForm() {
     setIsSubmitting(true);
     let pendingBookingId = "";
     try {
-        const hubtelSettings = await getHubtelSettings();
-        if (!hubtelSettings.accountId) {
-          throw new Error("Hubtel Account ID is not configured in settings.");
-        }
-        
         const ticketNumber = `KTS${Date.now()}`;
         const referral = referrals.find(r => r.phone === values.referralCode);
 
@@ -303,11 +284,11 @@ export function BookingForm() {
             clientReference: "",
         };
         
-        const pendingDocRef = await addDoc(collection(db, "pending_bookings"), pendingBookingData);
+        const pendingDocRef = doc(collection(db, "pending_bookings"));
         pendingBookingId = pendingDocRef.id;
 
         const batch = writeBatch(db);
-        batch.update(pendingDocRef, { clientReference: pendingDocRef.id });
+        batch.set(pendingDocRef, { ...pendingBookingData, clientReference: pendingBookingId });
         await batch.commit();
 
         const response = await fetch('/api/initiate-payment', {
@@ -318,7 +299,6 @@ export function BookingForm() {
                 description: `KTS Go Ticket - ${ticketNumber}`,
                 clientReference: pendingDocRef.id,
                 phone: values.phone,
-                accountId: hubtelSettings.accountId,
             })
         });
       
@@ -620,3 +600,5 @@ export function BookingForm() {
     </Form>
   );
 }
+
+    
