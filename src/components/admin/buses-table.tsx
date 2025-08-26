@@ -14,8 +14,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PlusCircle, Loader2, Trash2, Pencil, CheckCircle, Download } from "lucide-react";
-import { useEffect, useState } from "react";
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, writeBatch } from "firebase/firestore";
+import React, { useState } from "react";
+import { collection, addDoc, doc, updateDoc, deleteDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -23,6 +23,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Switch } from "../ui/switch";
+import { useDataFetching } from "@/hooks/useDataFetching";
 
 const busSchema = z.object({
   numberPlate: z.string().min(1, "Number plate is required."),
@@ -36,8 +37,7 @@ const busSchema = z.object({
 type Bus = z.infer<typeof busSchema> & { id: string };
 
 export default function BusesTable() {
-  const [buses, setBuses] = useState<Bus[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: buses, loading, error, refetch } = useDataFetching<Bus>(collection(db, "buses"));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingBus, setEditingBus] = useState<Bus | null>(null);
@@ -51,30 +51,6 @@ export default function BusesTable() {
       status: true,
     }
   });
-
-  const fetchBuses = async () => {
-    setLoading(true);
-    try {
-      const busesCollection = collection(db, "buses");
-      const busesSnapshot = await getDocs(busesCollection);
-      const busesList = busesSnapshot.docs.map(doc => {
-        const data = doc.data();
-        // Ensure status is a boolean, defaulting to false if it's missing or not a boolean
-        const status = typeof data.status === 'boolean' ? data.status : false;
-        return { id: doc.id, ...data, status } as Bus;
-      });
-      setBuses(busesList);
-    } catch (error) {
-      console.error("Error fetching buses: ", error);
-      toast({ variant: "destructive", title: "Error", description: "Could not fetch buses." });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchBuses();
-  }, []);
 
   const handleEditClick = (bus: Bus) => {
     setEditingBus(bus);
@@ -90,7 +66,7 @@ export default function BusesTable() {
     try {
         await deleteDoc(doc(db, "buses", busId));
         toast({ title: "Success", description: "Bus deleted successfully." });
-        fetchBuses(); // Refresh the list
+        refetch();
     } catch (error) {
         console.error("Error deleting bus: ", error);
         toast({ variant: "destructive", title: "Error", description: "Failed to delete bus." });
@@ -102,7 +78,7 @@ export default function BusesTable() {
         const busDoc = doc(db, "buses", bus.id);
         await updateDoc(busDoc, { status: newStatus });
         toast({ title: "Success", description: `Bus ${newStatus ? 'activated' : 'deactivated'}.` });
-        fetchBuses();
+        refetch();
     } catch (error) {
         console.error("Error updating bus status: ", error);
         toast({ variant: "destructive", title: "Error", description: "Failed to update bus status." });
@@ -120,7 +96,7 @@ export default function BusesTable() {
     try {
         await batch.commit();
         toast({ title: "Success", description: "All buses have been activated." });
-        fetchBuses();
+        refetch();
     } catch (error) {
         console.error("Error activating all buses: ", error);
         toast({ variant: "destructive", title: "Error", description: "Failed to activate all buses." });
@@ -138,7 +114,7 @@ export default function BusesTable() {
         await addDoc(collection(db, "buses"), values);
         toast({ title: "Success", description: "Bus added successfully." });
       }
-      fetchBuses();
+      refetch();
       setIsDialogOpen(false);
       setEditingBus(null);
       form.reset({ numberPlate: "", capacity: 32, status: true });
@@ -184,6 +160,10 @@ export default function BusesTable() {
 
   if (loading) {
     return <div>Loading buses...</div>;
+  }
+  
+  if (error) {
+    return <div className="text-destructive">Error: {error}</div>;
   }
 
   return (
@@ -293,5 +273,3 @@ export default function BusesTable() {
     </>
   );
 }
-
-    

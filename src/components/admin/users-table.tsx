@@ -10,8 +10,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { useEffect, useState } from "react";
-import { collection, getDocs, doc, setDoc } from "firebase/firestore";
+import React, { useState } from "react";
+import { collection } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Button } from "../ui/button";
 import { Eye, EyeOff, Loader2, Pencil, PlusCircle, Trash2 } from "lucide-react";
@@ -24,6 +24,7 @@ import { Label } from "../ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "../ui/alert-dialog";
+import { useDataFetching } from "@/hooks/useDataFetching";
 
 
 const adminSchema = z.object({
@@ -35,10 +36,16 @@ const adminSchema = z.object({
 
 type AdminFormValues = z.infer<typeof adminSchema>;
 
+type User = {
+    id: string;
+    name: string;
+    email: string;
+    role: "Admin" | "Super-Admin";
+};
+
 
 export default function UsersTable() {
-    const [users, setUsers] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { data: users, loading, error, refetch } = useDataFetching<User>(collection(db, "users"));
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -53,25 +60,6 @@ export default function UsersTable() {
             role: "Admin",
         },
     });
-
-    const fetchUsers = async () => {
-        setLoading(true);
-        try {
-            const usersCollection = collection(db, "users");
-            const usersSnapshot = await getDocs(usersCollection);
-            const usersList = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setUsers(usersList);
-        } catch (error) {
-            console.error("Error fetching users: ", error);
-            toast({ variant: "destructive", title: "Error", description: "Could not fetch users." });
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchUsers();
-    }, []);
 
     const onSubmit = async (values: AdminFormValues) => {
         setIsSubmitting(true);
@@ -89,7 +77,7 @@ export default function UsersTable() {
             }
 
             toast({ title: "Success", description: "Admin created successfully." });
-            fetchUsers();
+            refetch();
             setIsDialogOpen(false);
             form.reset();
         } catch (error: any) {
@@ -115,6 +103,10 @@ export default function UsersTable() {
 
     if (loading) {
         return <div>Loading users...</div>;
+    }
+    
+    if (error) {
+        return <div className="text-destructive">Error: {error}</div>;
     }
 
   return (
