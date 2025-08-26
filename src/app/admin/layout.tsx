@@ -31,44 +31,104 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { getAuth, signOut, onAuthStateChanged } from "firebase/auth";
+import { getAuth, signOut, onAuthStateChanged, User } from "firebase/auth";
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, createContext, useContext } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+
+type UserData = {
+    name: string;
+    role: string;
+} | null;
+
+type AuthContextType = {
+  user: User | null;
+  userData: UserData;
+  loading: boolean;
+};
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export function useAuth() {
+    const context = useContext(AuthContext);
+    if (context === undefined) {
+        throw new Error("useAuth must be used within an AuthProvider");
+    }
+    return context;
+}
+
+function AuthProvider({ children }: { children: React.ReactNode }) {
+    const [user, setUser] = useState<User | null>(null);
+    const [userData, setUserData] = useState<UserData>(null);
+    const [loading, setLoading] = useState(true);
+    const router = useRouter();
+    const pathname = usePathname();
+    const auth = getAuth();
+
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+            if (currentUser) {
+                setUser(currentUser);
+                try {
+                    const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+                    if (userDoc.exists()) {
+                        const data = userDoc.data();
+                        setUserData({ name: data.name, role: data.role });
+                    } else {
+                        // This user is authenticated but not in the 'users' collection.
+                        // Treat as unauthorized.
+                        await signOut(auth);
+                        router.push("/admin/login");
+                    }
+                } catch (error) {
+                    console.error("Error fetching user data:", error);
+                    // Handle error, maybe sign out and redirect
+                    await signOut(auth);
+                    router.push("/admin/login");
+                } finally {
+                    setLoading(false);
+                }
+            } else {
+                setUser(null);
+                setUserData(null);
+                if (pathname !== '/admin/login') {
+                    router.push("/admin/login");
+                }
+                setLoading(false);
+            }
+        });
+        return () => unsubscribe();
+    }, [auth, router, pathname]);
+    
+    return (
+        <AuthContext.Provider value={{ user, userData, loading }}>
+            {children}
+        </AuthContext.Provider>
+    )
+}
+
 
 export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  return (
+    <AuthProvider>
+      <LayoutContent>
+        {children}
+      </LayoutContent>
+    </AuthProvider>
+  )
+}
+
+
+function LayoutContent({ children }: { children: React.ReactNode}) {
   const router = useRouter();
   const pathname = usePathname();
   const auth = getAuth();
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [userName, setUserName] = useState("Admin");
-  const [userRole, setUserRole] = useState("Admin");
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setUser(user);
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setUserName(userData.name);
-            setUserRole(userData.role);
-        }
-      } else {
-        if (pathname !== '/admin/login') {
-            router.push("/admin/login");
-        }
-      }
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [auth, router, pathname]);
+  const { user, userData, loading } = useAuth();
 
   const handleLogout = async () => {
     try {
@@ -83,7 +143,7 @@ export default function AdminLayout({
     return <>{children}</>;
   }
 
-  if (loading) {
+  if (loading || !user || !userData) {
     return (
       <div className="flex items-center justify-center h-screen">
         Loading...
@@ -209,11 +269,11 @@ export default function AdminLayout({
                 <div className="flex items-center gap-3 p-2">
                     <Avatar>
                         <AvatarImage src="https://github.com/shadcn.png" alt="@shadcn" />
-                        <AvatarFallback>{userName.charAt(0)}</AvatarFallback>
+                        <AvatarFallback>{userData.name.charAt(0)}</AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col">
-                        <span className="font-semibold text-sm">{userName}</span>
-                        <span className="text-xs text-muted-foreground">{userRole}</span>
+                        <span className="font-semibold text-sm">{userData.name}</span>
+                        <span className="text-xs text-muted-foreground">{userData.role}</span>
                     </div>
                 </div>
             </SidebarMenuItem>

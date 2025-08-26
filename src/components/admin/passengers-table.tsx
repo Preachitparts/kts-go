@@ -8,11 +8,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { collection } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Button } from "../ui/button";
 import { Download } from "lucide-react";
-import { useDataFetching } from "@/hooks/useDataFetching";
+import { useState, useEffect } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 type Passenger = {
     id: string;
@@ -22,7 +23,27 @@ type Passenger = {
 };
 
 export default function PassengersTable() {
-  const { data: passengers, loading, error } = useDataFetching<Passenger>(collection(db, "passengers"));
+  const [passengers, setPassengers] = useState<Passenger[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const fetchPassengers = async () => {
+        setLoading(true);
+        try {
+            const passengersCollection = collection(db, "passengers");
+            const passengersSnapshot = await getDocs(passengersCollection);
+            const passengersList = passengersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Passenger));
+            setPassengers(passengersList);
+        } catch (error) {
+            console.error("Error fetching passengers:", error);
+            toast({ variant: "destructive", title: "Error", description: "Could not fetch passengers." });
+        } finally {
+            setLoading(false);
+        }
+    };
+    fetchPassengers();
+  }, [toast]);
 
   const downloadCSV = () => {
     const headers = ["Name", "Phone", "Emergency Contact"];
@@ -55,10 +76,6 @@ export default function PassengersTable() {
     return <div>Loading passengers...</div>;
   }
   
-  if (error) {
-    return <div className="text-destructive">Error: {error}</div>;
-  }
-
   return (
     <>
         <div className="flex justify-end mb-4">

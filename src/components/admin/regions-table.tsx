@@ -14,15 +14,14 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PlusCircle, Loader2, Trash2, Pencil, Download } from "lucide-react";
-import React, { useState } from "react";
-import { collection, addDoc, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import React, { useState, useEffect } from "react";
+import { collection, addDoc, doc, updateDoc, deleteDoc, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { useDataFetching } from "@/hooks/useDataFetching";
 
 const regionSchema = z.object({
   name: z.string().min(1, "Region name is required."),
@@ -31,7 +30,8 @@ const regionSchema = z.object({
 type Region = z.infer<typeof regionSchema> & { id: string };
 
 export default function RegionsTable() {
-  const { data: regions, loading, error, refetch } = useDataFetching<Region>(collection(db, "regions"));
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRegion, setEditingRegion] = useState<Region | null>(null);
@@ -43,6 +43,25 @@ export default function RegionsTable() {
       name: "",
     }
   });
+
+  const fetchRegions = async () => {
+    setLoading(true);
+    try {
+        const regionsCollection = collection(db, "regions");
+        const regionsSnapshot = await getDocs(regionsCollection);
+        const regionsList = regionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Region));
+        setRegions(regionsList);
+    } catch (error) {
+        console.error("Error fetching regions:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not fetch regions." });
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRegions();
+  }, []);
 
   const handleEditClick = (region: Region) => {
     setEditingRegion(region);
@@ -56,7 +75,7 @@ export default function RegionsTable() {
     try {
         await deleteDoc(doc(db, "regions", regionId));
         toast({ title: "Success", description: "Region deleted successfully." });
-        refetch();
+        fetchRegions();
     } catch (error) {
         console.error("Error deleting region: ", error);
         toast({ variant: "destructive", title: "Error", description: "Failed to delete region." });
@@ -74,7 +93,7 @@ export default function RegionsTable() {
         await addDoc(collection(db, "regions"), values);
         toast({ title: "Success", description: "Region added successfully." });
       }
-      refetch();
+      fetchRegions();
       setIsDialogOpen(false);
       setEditingRegion(null);
       form.reset({ name: "" });
@@ -117,10 +136,6 @@ export default function RegionsTable() {
     return <div>Loading regions...</div>;
   }
   
-  if (error) {
-    return <div className="text-destructive">Error: {error}</div>;
-  }
-
   return (
     <>
       <div className="flex justify-end gap-2 mb-4">
