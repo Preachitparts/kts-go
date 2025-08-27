@@ -22,7 +22,6 @@ import {
   UserCog,
   Settings,
   LogOut,
-  UserCircle,
   Map,
   HeartHandshake,
   CalendarClock,
@@ -36,6 +35,7 @@ import { useRouter, usePathname } from "next/navigation";
 import React, { useEffect, useState, createContext, useContext } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 type UserData = {
     name: string;
@@ -75,7 +75,6 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
                     setUserData({ name: data.name, role: data.role });
                     setUser(currentUser);
                 } else {
-                    // This case handles if a user is in auth but not in the users collection
                     await signOut(auth);
                     setUser(null);
                     setUserData(null);
@@ -107,13 +106,8 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
         );
     }
     
-    // Prevent rendering children if redirection is imminent
-    if (!user && pathname !== '/admin/login') {
+    if ((!user && pathname !== '/admin/login') || (user && pathname === '/admin/login')) {
          return null;
-    }
-
-    if (user && pathname === '/admin/login') {
-        return null;
     }
 
     return (
@@ -139,7 +133,6 @@ function LayoutContent({ children }: { children: React.ReactNode}) {
   };
 
   if (!userData) {
-    // This can happen briefly during logout or if data is missing
     return <div className="flex items-center justify-center h-screen">Loading user data...</div>;
   }
 
@@ -259,7 +252,7 @@ function LayoutContent({ children }: { children: React.ReactNode}) {
              <SidebarMenuItem>
                 <div className="flex items-center gap-3 p-2">
                     <Avatar>
-                        <AvatarImage src="https://github.com/shadcn.png" alt="@shadcn" />
+                        <AvatarImage src={`https://api.dicebear.com/8.x/lorelei/svg?seed=${userData.name}`} alt={userData.name} />
                         <AvatarFallback>{userData.name.charAt(0)}</AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col">
@@ -281,11 +274,13 @@ function LayoutContent({ children }: { children: React.ReactNode}) {
         <header className="flex items-center justify-between p-4 border-b">
           <div className="flex items-center gap-2">
             <SidebarTrigger className="md:hidden" />
-            <h2 className="text-lg font-semibold">Dashboard</h2>
+            <h2 className="text-lg font-semibold capitalize">
+              {pathname.split('/').pop()?.replace('-', ' ') || 'Dashboard'}
+            </h2>
           </div>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <SidebarTrigger className="hidden md:flex" />
-            <UserCircle />
           </div>
         </header>
         <main className="p-4 md:p-6 bg-secondary/50 flex-1">
