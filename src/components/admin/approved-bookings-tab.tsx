@@ -17,7 +17,7 @@ import { db } from "@/lib/firebase";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { CalendarIcon, Eye, User, Phone, Bus, Calendar as CalendarIconAlt, Armchair, Shield, Ticket, Hash } from "lucide-react";
+import { CalendarIcon, Eye, User, Phone, Bus, Calendar as CalendarIconAlt, Armchair, Shield, Ticket, Hash, Download } from "lucide-react";
 import { Calendar } from "../ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { useToast } from "@/hooks/use-toast";
@@ -142,41 +142,75 @@ export default function ApprovedBookingsTab() {
     return format(dateObj, "PPP");
   };
 
+  const downloadCSV = () => {
+    const headers = ["Passenger", "Route", "Departure Date", "Booked On", "Amount", "Status"];
+    const csvContent = [
+      headers.join(","),
+      ...filteredBookings.map(b => 
+        [
+          `"${b.name}"`,
+          `"${b.pickup} - ${b.destination}"`,
+          formatDate(b.date),
+          formatDate(b.createdAt),
+           b.totalAmount.toFixed(2),
+          "Approved"
+        ].join(",")
+      )
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", "approved-bookings.csv");
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   if (loading) {
     return <div>Loading bookings...</div>;
   }
 
   return (
     <>
-      <div className="flex gap-4 mb-4">
-        <Select value={selectedRoute} onValueChange={setSelectedRoute}>
-          <SelectTrigger className="w-[280px]">
-            <SelectValue placeholder="Filter by route..." />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Routes</SelectItem>
-            {routes.map(route => (
-              <SelectItem key={route.id} value={route.id}>{`${route.pickup} - ${route.destination}`}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant={"outline"}
-              className={cn("w-[280px] justify-start text-left font-normal", !selectedDate && "text-muted-foreground")}
-            >
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {selectedDate ? format(selectedDate, "PPP") : <span>Filter by departure date...</span>}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0">
-            <Calendar mode="single" selected={selectedDate} onSelect={setSelectedDate} initialFocus />
-          </PopoverContent>
-        </Popover>
-        {(selectedRoute !== 'all' || selectedDate) &&
-          <Button variant="ghost" onClick={() => { setSelectedRoute("all"); setSelectedDate(undefined) }}>Clear Filters</Button>
-        }
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex gap-4">
+          <Select value={selectedRoute} onValueChange={setSelectedRoute}>
+            <SelectTrigger className="w-[280px]">
+              <SelectValue placeholder="Filter by route..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Routes</SelectItem>
+              {routes.map(route => (
+                <SelectItem key={route.id} value={route.id}>{`${route.pickup} - ${route.destination}`}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant={"outline"}
+                className={cn("w-[280px] justify-start text-left font-normal", !selectedDate && "text-muted-foreground")}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {selectedDate ? format(selectedDate, "PPP") : <span>Filter by departure date...</span>}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <Calendar mode="single" selected={selectedDate} onSelect={setSelectedDate} initialFocus />
+            </PopoverContent>
+          </Popover>
+          {(selectedRoute !== 'all' || selectedDate) &&
+            <Button variant="ghost" onClick={() => { setSelectedRoute("all"); setSelectedDate(undefined) }}>Clear Filters</Button>
+          }
+        </div>
+        <Button variant="outline" onClick={downloadCSV}>
+            <Download className="mr-2 h-4 w-4" /> Download CSV
+        </Button>
       </div>
       <Table>
         <TableHeader>
