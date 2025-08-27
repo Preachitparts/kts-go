@@ -50,7 +50,7 @@ export default function BookedSeatsManager() {
   const [bookings, setBookings] = React.useState<Booking[]>([]);
   
   // Filter states
-  const [selectedRouteId, setSelectedRouteId] = React.useState("");
+  const [selectedRouteId, setSelectedRouteId] = React.useState("all");
   const [selectedDate, setSelectedDate] = React.useState<Date | undefined>();
   const [selectedBusId, setSelectedBusId] = React.useState("");
 
@@ -90,21 +90,29 @@ export default function BookedSeatsManager() {
   }, [toast]);
 
   const availableDates = React.useMemo(() => {
-    if (!selectedRouteId) return [];
-    return sessions
-      .filter(session => session.routeId === selectedRouteId)
-      .map(session => session.departureDate.toDate());
+    const relevantSessions = selectedRouteId === 'all' 
+      ? sessions 
+      : sessions.filter(session => session.routeId === selectedRouteId);
+    
+    return relevantSessions.map(session => session.departureDate.toDate());
   }, [selectedRouteId, sessions]);
 
+
   const availableBuses = React.useMemo(() => {
-    if (!selectedRouteId || !selectedDate) return [];
-    const sessionsForRouteAndDate = sessions.filter(session =>
-      session.routeId === selectedRouteId &&
+    if (!selectedDate) return [];
+    
+    let sessionsForDate = sessions.filter(session =>
       format(session.departureDate.toDate(), 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')
     );
-    const busIds = [...new Set(sessionsForRouteAndDate.map(s => s.busId))];
+
+    if (selectedRouteId !== 'all') {
+      sessionsForDate = sessionsForDate.filter(session => session.routeId === selectedRouteId);
+    }
+    
+    const busIds = [...new Set(sessionsForDate.map(s => s.busId))];
     return buses.filter(bus => busIds.includes(bus.id));
   }, [selectedRouteId, selectedDate, sessions, buses]);
+
 
   React.useEffect(() => {
     const fetchBookingsForJourney = async () => {
@@ -209,6 +217,7 @@ export default function BookedSeatsManager() {
             <SelectValue placeholder={loading ? "Loading routes..." : "1. Select Route"} />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="all">All Routes</SelectItem>
             {routes.map(route => (
               <SelectItem key={route.id} value={route.id}>{`${route.pickup} - ${route.destination}`}</SelectItem>
             ))}
@@ -220,7 +229,7 @@ export default function BookedSeatsManager() {
             <Button
               variant={"outline"}
               className={cn("w-full justify-start text-left font-normal", !selectedDate && "text-muted-foreground")}
-              disabled={!selectedRouteId || availableDates.length === 0}
+              disabled={loading || availableDates.length === 0}
             >
               <CalendarIcon className="mr-2 h-4 w-4" />
               {selectedDate ? format(selectedDate, "PPP") : (<span>2. Select Date</span>)}
