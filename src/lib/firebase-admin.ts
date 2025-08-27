@@ -4,26 +4,29 @@ import * as admin from "firebase-admin";
 const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
 
 if (!serviceAccountString) {
-  throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set. Please check your .env file.");
+  throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set. Please check your deployment environment's configuration.");
 }
 
+let serviceAccount: admin.ServiceAccount;
 try {
-    const serviceAccount = JSON.parse(serviceAccountString);
-    if (admin.apps.length === 0) {
-        admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount),
-        });
-    }
+    serviceAccount = JSON.parse(serviceAccountString);
 } catch (error: any) {
-    if (error instanceof SyntaxError) {
-        console.error("Firebase Admin SDK Error: Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY. The JSON is malformed.", error.message);
-   } else {
-        console.error("Firebase Admin SDK Error: Initialization failed.", error.message);
-   }
-   throw new Error("Server configuration error: Could not initialize Firebase Admin SDK.");
+   console.error("Firebase Admin SDK Error: Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY. The JSON is malformed.", error.message);
+   throw new Error("Server configuration error: Could not parse Firebase service account key.");
+}
+
+function getFirebaseAdminApp() {
+    if (admin.apps.length > 0) {
+        return admin.apps[0] as admin.app.App;
+    }
+
+    return admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+    });
 }
 
 
-export const adminDb = admin.firestore();
-export const adminAuth = admin.auth();
+const app = getFirebaseAdminApp();
+export const adminDb = admin.firestore(app);
+export const adminAuth = admin.auth(app);
 export default admin;
