@@ -10,6 +10,7 @@ interface SeatSelectionProps {
   capacity: number;
   selectedSeats: string[];
   occupiedSeats: string[];
+  pendingSeats?: string[];
   isLoading: boolean;
   onSeatsChange: (seats: string | string[]) => void;
 }
@@ -28,16 +29,28 @@ const SteeringWheelIcon = () => (
 );
 
 
-const Seat = ({ seatNumber, isSelected, onSelect, isOccupied }: { seatNumber: string; isSelected: boolean; onSelect: (seatNumber: string) => void; isOccupied?: boolean }) => {
+const Seat = ({ seatNumber, status, onSelect }: { seatNumber: string; status: 'available' | 'selected' | 'occupied' | 'pending'; onSelect: (seatNumber: string) => void; }) => {
+  const isClickable = status !== 'occupied';
+  
+  const getVariant = () => {
+    switch(status) {
+        case 'selected': return 'default';
+        case 'occupied': return 'destructive';
+        case 'pending': return 'secondary';
+        default: return 'outline';
+    }
+  };
+
   return (
     <Button
       type="button"
-      variant={isSelected ? "default" : isOccupied ? "destructive" : "outline"}
+      variant={getVariant()}
       size="icon"
       className={cn(
         "h-8 w-8 text-xs font-semibold",
-        isOccupied && "cursor-pointer bg-red-300 text-white hover:bg-red-400",
-        isSelected && "bg-primary text-primary-foreground"
+        status === 'occupied' && "cursor-pointer bg-red-300 text-white hover:bg-red-400",
+        status === 'pending' && "cursor-pointer bg-yellow-400 text-black hover:bg-yellow-500",
+        status === 'selected' && "bg-primary text-primary-foreground"
       )}
       onClick={() => onSelect(seatNumber)}
     >
@@ -50,22 +63,22 @@ export default function SeatSelection({
   capacity,
   selectedSeats,
   occupiedSeats,
+  pendingSeats = [],
   isLoading,
   onSeatsChange,
 }: SeatSelectionProps) {
-  const toggleSeat = (seatNumber: string) => {
-    // If onSeatsChange expects a single seat number for actions (like in admin), pass it directly.
-    // Otherwise, toggle selection for booking form.
-    if (!Array.isArray(selectedSeats)) {
+  const handleSeatClick = (seatNumber: string) => {
+    if (occupiedSeats.includes(seatNumber) || pendingSeats.includes(seatNumber)) {
         (onSeatsChange as (seat: string) => void)(seatNumber);
         return;
     }
 
-    const newSelectedSeats = selectedSeats.includes(seatNumber)
-      ? selectedSeats.filter((s) => s !== seatNumber)
-      : [...selectedSeats, seatNumber];
-    
-    (onSeatsChange as (seats: string[]) => void)(newSelectedSeats);
+    if (Array.isArray(selectedSeats)) {
+        const newSelectedSeats = selectedSeats.includes(seatNumber)
+          ? selectedSeats.filter((s) => s !== seatNumber)
+          : [...selectedSeats, seatNumber];
+        (onSeatsChange as (seats: string[]) => void)(newSelectedSeats);
+    }
   };
 
   const renderSeats = () => {
@@ -97,13 +110,21 @@ export default function SeatSelection({
         if (seatIndex >= capacity) continue;
 
         const seatNumber = `${seatIndex + 1}`;
+        let seatStatus: 'available' | 'selected' | 'occupied' | 'pending' = 'available';
+        if (occupiedSeats.includes(seatNumber)) {
+            seatStatus = 'occupied';
+        } else if (pendingSeats.includes(seatNumber)) {
+            seatStatus = 'pending';
+        } else if (Array.isArray(selectedSeats) && selectedSeats.includes(seatNumber)) {
+            seatStatus = 'selected';
+        }
+        
         rowSeats.push(
           <Seat
             key={seatNumber}
             seatNumber={seatNumber}
-            isSelected={Array.isArray(selectedSeats) && selectedSeats.includes(seatNumber)}
-            onSelect={toggleSeat}
-            isOccupied={occupiedSeats.includes(seatNumber)}
+            status={seatStatus}
+            onSelect={handleSeatClick}
           />
         );
       }
@@ -130,7 +151,8 @@ export default function SeatSelection({
             {renderSeats()}
         </div>
         <div className="flex justify-center items-center gap-4 mt-4 text-xs">
-            <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-destructive border"></div> Occupied</div>
+            <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-destructive border"></div> Booked</div>
+            <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-yellow-400 border"></div> Pending</div>
             <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-primary border"></div> Selected</div>
             <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-background border"></div> Available</div>
         </div>

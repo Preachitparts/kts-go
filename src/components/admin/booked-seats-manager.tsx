@@ -2,9 +2,9 @@
 "use client";
 
 import React from "react";
-import { collection, getDocs, query, where, doc, writeBatch, Timestamp, addDoc } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, writeBatch, Timestamp, collectionGroup } from "firebase/firestore";
 import { format } from "date-fns";
-import { CalendarIcon, Loader2 } from "lucide-react";
+import { CalendarIcon } from "lucide-react";
 
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
@@ -36,7 +36,37 @@ import SeatSelection from "../seat-selection";
 type Route = { id: string; pickup: string; destination: string; regionId: string };
 type Session = { id: string; routeId: string; busId: string; departureDate: Timestamp };
 type Bus = { id: string; numberPlate: string; capacity: number };
-type Booking = { id: string; seats: string[]; name: string; phone: string; [key: string]: any };
+type Booking = { id: string; seats: string[]; status: 'paid' | 'pending'; [key: string]: any };
+
+async function releaseExpiredSeats() {
+    const fiveMinutesAgo = Timestamp.fromMillis(Date.now() - 5 * 60 * 1000);
+    const expiredBookingsQuery = query(
+        collection(db, "pending_bookings"),
+        where("createdAt", "<=", fiveMinutesAgo)
+    );
+
+    const snapshot = await getDocs(expiredBookingsQuery);
+    if (snapshot.empty) {
+        return 0;
+    }
+
+    const batch = writeBatch(db);
+    snapshot.forEach(docSnap => {
+        const bookingData = docSnap.data();
+        const rejectedBookingData = {
+            ...bookingData,
+            status: 'rejected',
+            rejectionReason: 'Payment timed out',
+        };
+        const rejectedDocRef = doc(collection(db, "rejected_bookings"));
+        batch.set(rejectedDocRef, rejectedBookingData);
+        batch.delete(docSnap.ref);
+    });
+
+    await batch.commit();
+    console.log(`Released seats for ${snapshot.size} expired bookings.`);
+    return snapshot.size;
+}
 
 export default function BookedSeatsManager() {
   const { toast } = useToast();
@@ -47,7 +77,7 @@ export default function BookedSeatsManager() {
   const [routes, setRoutes] = React.useState<Route[]>([]);
   const [sessions, setSessions] = React.useState<Session[]>([]);
   const [buses, setBuses] = React.useState<Bus[]>([]);
-  const [bookings, setBookings] = React.useState<Booking[]>([]);
+  const [allBookings, setAllBookings] = React.useState<Booking[]>([]);
   
   // Filter states
   const [selectedRouteId, setSelectedRouteId] = React.useState("all");
@@ -55,7 +85,7 @@ export default function BookedSeatsManager() {
   const [selectedBusId, setSelectedBusId] = React.useState("");
 
   // Seat management states
-  const [selectedSeat, setSelectedSeat] = React.useState<string | null>(null);
+  const [selectedSeat, setSelectedSeat] = React.useState<{ number: string; booking: Booking | undefined } | null>(null);
   const [isAlertOpen, setIsAlertOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -97,7 +127,6 @@ export default function BookedSeatsManager() {
     return relevantSessions.map(session => session.departureDate.toDate());
   }, [selectedRouteId, sessions]);
 
-
   const availableBuses = React.useMemo(() => {
     if (!selectedDate) return [];
     
@@ -113,83 +142,87 @@ export default function BookedSeatsManager() {
     return buses.filter(bus => busIds.includes(bus.id));
   }, [selectedRouteId, selectedDate, sessions, buses]);
 
+  const fetchBookingsForJourney = React.useCallback(async () => {
+    if (!selectedBusId || !selectedDate) {
+      setAllBookings([]);
+      return;
+    }
+    setLoadingSeats(true);
+    try {
+        const releasedCount = await releaseExpiredSeats();
+        if (releasedCount > 0) {
+            toast({ title: "Auto-Release", description: `${releasedCount} pending seat(s) were released due to payment timeout.` });
+        }
 
-  React.useEffect(() => {
-    const fetchBookingsForJourney = async () => {
-      if (!selectedBusId || !selectedDate) {
-        setBookings([]);
-        return;
-      }
-      setLoadingSeats(true);
-      try {
         const targetDate = format(selectedDate, "yyyy-MM-dd");
-        const bookingsQuery = query(
-          collection(db, "bookings"),
-          where("busId", "==", selectedBusId)
-        );
-        const snapshot = await getDocs(bookingsQuery);
-        const allBookings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Booking));
-        
-        const filteredBookings = allBookings.filter(b => {
-            const bookingDate = b.date?.toDate ? b.date.toDate() : new Date(b.date);
-            return format(bookingDate, "yyyy-MM-dd") === targetDate;
-        });
 
-        setBookings(filteredBookings);
-      } catch (error) {
+        const paidQuery = query(collection(db, "bookings"), where("busId", "==", selectedBusId));
+        const pendingQuery = query(collection(db, "pending_bookings"), where("busId", "==", selectedBusId));
+        
+        const [paidSnapshot, pendingSnapshot] = await Promise.all([getDocs(paidQuery), getDocs(pendingQuery)]);
+        
+        const filterByDate = (doc: any) => {
+            const bookingDate = doc.data().date?.toDate ? doc.data().date.toDate() : new Date(doc.data().date);
+            return format(bookingDate, "yyyy-MM-dd") === targetDate;
+        };
+        
+        const paidBookings = paidSnapshot.docs.filter(filterByDate).map(doc => ({ id: doc.id, ...doc.data(), status: 'paid' } as Booking));
+        const pendingBookings = pendingSnapshot.docs.filter(filterByDate).map(doc => ({ id: doc.id, ...doc.data(), status: 'pending' } as Booking));
+
+        setAllBookings([...paidBookings, ...pendingBookings]);
+    } catch (error) {
         console.error("Error fetching bookings:", error);
         toast({ variant: "destructive", title: "Error", description: "Failed to fetch bookings for this journey." });
-      } finally {
+    } finally {
         setLoadingSeats(false);
-      }
-    };
-    fetchBookingsForJourney();
-  }, [selectedBusId, selectedDate, toast]);
+    }
+}, [selectedBusId, selectedDate, toast]);
 
-  const occupiedSeats = React.useMemo(() => {
-    return bookings.flatMap(b => b.seats);
-  }, [bookings]);
+
+  React.useEffect(() => {
+    fetchBookingsForJourney();
+  }, [fetchBookingsForJourney]);
+
+  const { paidSeats, pendingSeats } = React.useMemo(() => {
+    const paid = allBookings.filter(b => b.status === 'paid').flatMap(b => b.seats);
+    const pending = allBookings.filter(b => b.status === 'pending').flatMap(b => b.seats);
+    return { paidSeats: paid, pendingSeats: pending };
+  }, [allBookings]);
   
   const selectedBus = React.useMemo(() => {
       return buses.find(b => b.id === selectedBusId);
   }, [buses, selectedBusId]);
 
   const handleSeatClick = (seatNumber: string) => {
-    if (occupiedSeats.includes(seatNumber)) {
-      setSelectedSeat(seatNumber);
+    const booking = allBookings.find(b => b.seats.includes(seatNumber));
+    if (booking) {
+      setSelectedSeat({ number: seatNumber, booking });
       setIsAlertOpen(true);
     }
   };
 
   const handleFreeUpSeat = async () => {
-    if (!selectedSeat) return;
+    if (!selectedSeat || !selectedSeat.booking) return;
 
-    const bookingToCancel = bookings.find(b => b.seats.includes(selectedSeat));
-    if (!bookingToCancel) {
-        toast({ variant: "destructive", title: "Error", description: "Could not find the booking for this seat." });
-        return;
-    }
+    const bookingToCancel = selectedSeat.booking;
+    const originalCollection = bookingToCancel.status === 'paid' ? 'bookings' : 'pending_bookings';
 
     try {
         const batch = writeBatch(db);
         
-        // 1. Move the booking to rejected_bookings
         const rejectedData = { ...bookingToCancel, status: 'rejected', rejectionReason: `Manually cancelled by admin on ${new Date().toLocaleDateString()}` };
         delete rejectedData.id;
         const rejectedRef = doc(collection(db, "rejected_bookings"));
         batch.set(rejectedRef, rejectedData);
         
-        // 2. Delete the original booking
-        const originalBookingRef = doc(db, "bookings", bookingToCancel.id);
+        const originalBookingRef = doc(db, originalCollection, bookingToCancel.id);
         batch.delete(originalBookingRef);
         
         await batch.commit();
 
-        toast({ title: "Success", description: `Seat ${selectedSeat} has been made available.` });
-
-        // Refresh bookings for the current view
-        const updatedBookings = bookings.filter(b => b.id !== bookingToCancel.id);
-        setBookings(updatedBookings);
+        toast({ title: "Success", description: `Seat ${selectedSeat.number} has been made available.` });
+        
+        fetchBookingsForJourney();
 
     } catch (error) {
         console.error("Error cancelling booking:", error);
@@ -209,7 +242,7 @@ export default function BookedSeatsManager() {
             setSelectedRouteId(value);
             setSelectedDate(undefined);
             setSelectedBusId("");
-            setBookings([]);
+            setAllBookings([]);
           }}
           disabled={loading || routes.length === 0}
         >
@@ -242,7 +275,7 @@ export default function BookedSeatsManager() {
               onSelect={(date) => {
                 setSelectedDate(date);
                 setSelectedBusId("");
-                setBookings([]);
+                setAllBookings([]);
               }}
               disabled={(date) => 
                 date < new Date(new Date().setHours(0,0,0,0)) || 
@@ -273,10 +306,11 @@ export default function BookedSeatsManager() {
         {selectedBus ? (
           <SeatSelection
             capacity={selectedBus.capacity}
-            selectedSeats={[]}
-            occupiedSeats={occupiedSeats}
+            selectedSeats={[]} 
+            occupiedSeats={paidSeats}
+            pendingSeats={pendingSeats}
             isLoading={loadingSeats}
-            onSeatsChange={handleSeatClick} // Re-purposing this for clicking on any seat
+            onSeatsChange={handleSeatClick}
           />
         ) : (
           <Alert>
@@ -291,9 +325,9 @@ export default function BookedSeatsManager() {
       <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Free Up Seat {selectedSeat}?</AlertDialogTitle>
+            <AlertDialogTitle>Free Up Seat {selectedSeat?.number}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action will cancel the booking associated with this seat and make it available for others. The original booking will be moved to the rejected/cancelled list. This cannot be undone.
+              This action will cancel the booking associated with this seat (Status: {selectedSeat?.booking?.status}) and make it available for others. The original booking will be moved to the rejected/cancelled list. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
