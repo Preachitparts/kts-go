@@ -64,7 +64,8 @@ export function SessionsWithBookingsTable() {
         const sessionIdsFromBookings = new Set<string>();
 
         for (const booking of allBookings) {
-            const departureDateStr = format(booking.date.toDate(), "yyyy-MM-dd");
+            const bookingDate = booking.date?.toDate ? booking.date.toDate() : new Date(booking.date);
+            const departureDateStr = format(bookingDate, "yyyy-MM-dd");
             const sessionKey = `${booking.routeId}-${booking.busId}-${departureDateStr}`;
             
             const currentCount = sessionBookingCounts.get(sessionKey) || 0;
