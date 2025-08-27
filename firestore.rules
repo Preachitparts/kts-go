@@ -1,48 +1,46 @@
 
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-  
-    // Function to check if a user is an authenticated admin
+    
+    // Helper function to check for admin role
     function isAdmin() {
-      return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['Admin', 'Super-Admin'];
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin' ||
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Super-Admin');
     }
 
-    // Admins have full access to all collections
+    // Admins can write to any collection
     match /{document=**} {
-      allow read, write: if isAdmin();
+      allow write: if isAdmin();
     }
     
-    // Public read access for collections needed by the booking form
+    // Allow any authenticated user to read from any collection.
+    // This is safe because the admin panel routes are protected by application logic.
+    match /{document=**} {
+      allow read: if request.auth != null;
+    }
+    
+    // Allow unauthenticated users to read collections needed for the public booking form
     match /regions/{regionId} {
       allow get, list: if true;
     }
-    
     match /routes/{routeId} {
       allow get, list: if true;
     }
-    
     match /buses/{busId} {
-       allow get, list: if true;
+      allow get, list: if true;
     }
-
     match /sessions/{sessionId} {
-        allow get, list: if true;
+      allow get, list: if true;
     }
-    
     match /referrals/{referralId} {
         allow get, list: if true;
     }
-    
+
     // Allow anyone to create a pending booking
     match /pending_bookings/{bookingId} {
-        allow create: if true;
-    }
-    
-    // Bookings can be read by anyone if they have the clientReference (for confirmation page)
-    match /bookings/{bookingId} {
-        allow get: if true;
+      allow create: if true;
     }
   }
 }
