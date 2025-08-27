@@ -5,8 +5,8 @@ export default function BookedSeatsPage() {
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Manage Booked Seats</CardTitle>
-                <CardDescription>View booked seats for a specific journey and free them up if needed.</CardDescription>
+                <CardTitle>Seat Management</CardTitle>
+                <CardDescription>View a real-time seat map for any journey, check seat status, and manually free up seats if needed.</CardDescription>
             </CardHeader>
             <CardContent>
                 <BookedSeatsManager />

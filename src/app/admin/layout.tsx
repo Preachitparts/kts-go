@@ -101,16 +101,8 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
         );
     }
     
-    if (pathname === '/admin/login') {
-        return <>{children}</>;
-    }
-
-    if (!user || !userData) {
-         return (
-            <div className="flex items-center justify-center h-screen">
-                Redirecting to login...
-            </div>
-        );
+    if (!user && pathname !== '/admin/login') {
+         return null;
     }
 
     return (
@@ -176,7 +168,7 @@ function LayoutContent({ children }: { children: React.ReactNode}) {
               <SidebarMenuButton asChild isActive={pathname === '/admin/booked-seats'}>
                 <Link href="/admin/booked-seats">
                   <Armchair />
-                  Booked Seats
+                  Seat Management
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -289,6 +281,7 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+
   return (
     <AuthProvider>
       {pathname === '/admin/login' ? (
