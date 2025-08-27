@@ -68,6 +68,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+            setLoading(true);
             if (currentUser) {
                 setUser(currentUser);
                 try {
@@ -77,14 +78,16 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
                         setUserData({ name: data.name, role: data.role });
                     } else {
                         // This user is authenticated but not in the 'users' collection.
-                        // Treat as unauthorized.
                         await signOut(auth);
+                        setUserData(null);
+                        setUser(null);
                         router.push("/admin/login");
                     }
                 } catch (error) {
                     console.error("Error fetching user data:", error);
-                    // Handle error, maybe sign out and redirect
                     await signOut(auth);
+                    setUserData(null);
+                    setUser(null);
                     router.push("/admin/login");
                 } finally {
                     setLoading(false);
@@ -101,6 +104,32 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
         return () => unsubscribe();
     }, [auth, router, pathname]);
     
+    // While loading, or if no user is authenticated, render a loading screen or nothing,
+    // preventing children from rendering prematurely.
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-screen">
+                Loading...
+            </div>
+        );
+    }
+
+    // If on the login page, render it directly without the main layout.
+    if (pathname === '/admin/login') {
+        return <>{children}</>;
+    }
+
+    // If not loading and no user, the effect will redirect.
+    // This state prevents rendering children that require auth.
+    if (!user || !userData) {
+         return (
+            <div className="flex items-center justify-center h-screen">
+                Redirecting to login...
+            </div>
+        );
+    }
+
+    // If authenticated and not loading, provide the context to children.
     return (
         <AuthContext.Provider value={{ user, userData, loading }}>
             {children}
@@ -128,7 +157,7 @@ function LayoutContent({ children }: { children: React.ReactNode}) {
   const router = useRouter();
   const pathname = usePathname();
   const auth = getAuth();
-  const { user, userData, loading } = useAuth();
+  const { userData } = useAuth(); // No need for user or loading, AuthProvider guarantees they are valid.
 
   const handleLogout = async () => {
     try {
@@ -139,18 +168,10 @@ function LayoutContent({ children }: { children: React.ReactNode}) {
     }
   };
 
+  // The login page case is handled by AuthProvider, so this is for layout components.
   if (pathname === "/admin/login") {
-    return <>{children}</>;
+    return null; 
   }
-
-  if (loading || !user || !userData) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        Loading...
-      </div>
-    );
-  }
-
 
   return (
     <SidebarProvider>
@@ -269,11 +290,11 @@ function LayoutContent({ children }: { children: React.ReactNode}) {
                 <div className="flex items-center gap-3 p-2">
                     <Avatar>
                         <AvatarImage src="https://github.com/shadcn.png" alt="@shadcn" />
-                        <AvatarFallback>{userData.name.charAt(0)}</AvatarFallback>
+                        <AvatarFallback>{userData!.name.charAt(0)}</AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col">
-                        <span className="font-semibold text-sm">{userData.name}</span>
-                        <span className="text-xs text-muted-foreground">{userData.role}</span>
+                        <span className="font-semibold text-sm">{userData!.name}</span>
+                        <span className="text-xs text-muted-foreground">{userData!.role}</span>
                     </div>
                 </div>
             </SidebarMenuItem>
