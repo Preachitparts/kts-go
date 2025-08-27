@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getAuth, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
+import { Label } from "@/components/ui/label";
 
 const settingsSchema = z.object({
     liveMode: z.boolean().default(true),
