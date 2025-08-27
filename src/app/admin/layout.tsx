@@ -70,27 +70,16 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             setLoading(true);
             if (currentUser) {
-                setUser(currentUser);
-                try {
-                    const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-                    if (userDoc.exists()) {
-                        const data = userDoc.data();
-                        setUserData({ name: data.name, role: data.role });
-                    } else {
-                        // This user is authenticated but not in the 'users' collection.
-                        await signOut(auth);
-                        setUserData(null);
-                        setUser(null);
-                        router.push("/admin/login");
-                    }
-                } catch (error) {
-                    console.error("Error fetching user data:", error);
+                const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+                if (userDoc.exists()) {
+                    const data = userDoc.data();
+                    setUserData({ name: data.name, role: data.role });
+                    setUser(currentUser);
+                } else {
                     await signOut(auth);
                     setUserData(null);
                     setUser(null);
                     router.push("/admin/login");
-                } finally {
-                    setLoading(false);
                 }
             } else {
                 setUser(null);
@@ -98,14 +87,12 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
                 if (pathname !== '/admin/login') {
                     router.push("/admin/login");
                 }
-                setLoading(false);
             }
+            setLoading(false);
         });
         return () => unsubscribe();
     }, [auth, router, pathname]);
     
-    // While loading, or if no user is authenticated, render a loading screen or nothing,
-    // preventing children from rendering prematurely.
     if (loading) {
         return (
             <div className="flex items-center justify-center h-screen">
@@ -113,14 +100,11 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
             </div>
         );
     }
-
-    // If on the login page, render it directly without the main layout.
+    
     if (pathname === '/admin/login') {
         return <>{children}</>;
     }
 
-    // If not loading and no user, the effect will redirect.
-    // This state prevents rendering children that require auth.
     if (!user || !userData) {
          return (
             <div className="flex items-center justify-center h-screen">
@@ -129,7 +113,6 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
         );
     }
 
-    // If authenticated and not loading, provide the context to children.
     return (
         <AuthContext.Provider value={{ user, userData, loading }}>
             {children}
@@ -305,11 +288,16 @@ export default function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
   return (
     <AuthProvider>
-      <LayoutContent>
-        {children}
-      </LayoutContent>
+      {pathname === '/admin/login' ? (
+        children
+      ) : (
+        <LayoutContent>
+          {children}
+        </LayoutContent>
+      )}
     </AuthProvider>
   )
 }
