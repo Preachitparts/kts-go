@@ -30,8 +30,6 @@ const SteeringWheelIcon = () => (
 
 
 const Seat = ({ seatNumber, status, onSelect }: { seatNumber: string; status: 'available' | 'selected' | 'occupied' | 'pending'; onSelect: (seatNumber: string) => void; }) => {
-  const isClickable = status !== 'occupied';
-  
   const getVariant = () => {
     switch(status) {
         case 'selected': return 'default';
@@ -48,9 +46,8 @@ const Seat = ({ seatNumber, status, onSelect }: { seatNumber: string; status: 'a
       size="icon"
       className={cn(
         "h-8 w-8 text-xs font-semibold",
-        status === 'occupied' && "cursor-pointer bg-red-300 text-white hover:bg-red-400",
-        status === 'pending' && "cursor-pointer bg-yellow-400 text-black hover:bg-yellow-500",
-        status === 'selected' && "bg-primary text-primary-foreground"
+        status === 'occupied' && "cursor-pointer",
+        status === 'pending' && "cursor-pointer bg-yellow-400 text-secondary-foreground hover:bg-yellow-500"
       )}
       onClick={() => onSelect(seatNumber)}
     >
@@ -150,7 +147,7 @@ export default function SeatSelection({
         <div className="flex flex-col gap-2 w-full">
             {renderSeats()}
         </div>
-        <div className="flex justify-center items-center gap-4 mt-4 text-xs">
+        <div className="flex flex-wrap justify-center items-center gap-4 mt-4 text-xs">
             <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-destructive border"></div> Booked</div>
             <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-yellow-400 border"></div> Pending</div>
             <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-primary border"></div> Selected</div>
