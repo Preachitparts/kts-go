@@ -33,7 +33,7 @@ import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getAuth, signOut, onAuthStateChanged, User } from "firebase/auth";
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect, useState, createContext, useContext } from "react";
+import React, { useEffect, useState, createContext, useContext } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -68,7 +68,6 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-            setLoading(true);
             if (currentUser) {
                 const userDoc = await getDoc(doc(db, "users", currentUser.uid));
                 if (userDoc.exists()) {
@@ -76,10 +75,13 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
                     setUserData({ name: data.name, role: data.role });
                     setUser(currentUser);
                 } else {
+                    // This case handles if a user is in auth but not in the users collection
                     await signOut(auth);
-                    setUserData(null);
                     setUser(null);
-                    router.push("/admin/login");
+                    setUserData(null);
+                    if (pathname !== '/admin/login') {
+                        router.push("/admin/login");
+                    }
                 }
             } else {
                 setUser(null);
@@ -91,18 +93,27 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
             setLoading(false);
         });
         return () => unsubscribe();
-    }, [auth, router, pathname]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-screen">
-                Loading...
+            <div className="flex items-center justify-center h-screen bg-background">
+                <p className="text-lg">Loading Admin Portal...</p>
             </div>
         );
     }
     
+    // If not logged in and not on the login page, the redirect will be handled by the effect.
+    // We return null to prevent rendering children until auth state is resolved.
     if (!user && pathname !== '/admin/login') {
          return null;
+    }
+
+    // If on login page and already logged in, redirect to dashboard
+    if (user && pathname === '/admin/login') {
+        router.push('/admin');
+        return null; // Return null while redirecting
     }
 
     return (
@@ -126,6 +137,11 @@ function LayoutContent({ children }: { children: React.ReactNode}) {
       console.error("Logout failed", error);
     }
   };
+
+  if (!userData) {
+    // This can happen briefly during logout or if data is missing
+    return <div className="flex items-center justify-center h-screen">Loading user data...</div>;
+  }
 
   return (
     <SidebarProvider>
@@ -165,8 +181,8 @@ function LayoutContent({ children }: { children: React.ReactNode}) {
               </SidebarMenuButton>
             </SidebarMenuItem>
              <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname === '/admin/booked-seats'}>
-                <Link href="/admin/booked-seats">
+              <SidebarMenuButton asChild isActive={pathname.startsWith('/admin/seat-management')}>
+                <Link href="/admin/seat-management">
                   <Armchair />
                   Seat Management
                 </Link>
@@ -244,11 +260,11 @@ function LayoutContent({ children }: { children: React.ReactNode}) {
                 <div className="flex items-center gap-3 p-2">
                     <Avatar>
                         <AvatarImage src="https://github.com/shadcn.png" alt="@shadcn" />
-                        <AvatarFallback>{userData!.name.charAt(0)}</AvatarFallback>
+                        <AvatarFallback>{userData.name.charAt(0)}</AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col">
-                        <span className="font-semibold text-sm">{userData!.name}</span>
-                        <span className="text-xs text-muted-foreground">{userData!.role}</span>
+                        <span className="font-semibold text-sm">{userData.name}</span>
+                        <span className="text-xs text-muted-foreground">{userData.role}</span>
                     </div>
                 </div>
             </SidebarMenuItem>
