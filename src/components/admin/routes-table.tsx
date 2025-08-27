@@ -190,6 +190,25 @@ export default function RoutesTable() {
     }
   };
 
+  const handleSwapAll = async () => {
+    const batch = writeBatch(db);
+    routes.forEach(route => {
+        const routeRef = doc(db, "routes", route.id);
+        batch.update(routeRef, { 
+            pickup: route.destination,
+            destination: route.pickup 
+        });
+    });
+    try {
+        await batch.commit();
+        toast({ title: "Success", description: "All routes have been swapped." });
+        fetchPrerequisites();
+    } catch (error) {
+        console.error("Error swapping all routes: ", error);
+        toast({ variant: "destructive", title: "Error", description: "Failed to swap all routes." });
+    }
+  };
+
 
   const onSubmit = async (values: z.infer<typeof routeSchema>) => {
     setIsSubmitting(true);
@@ -288,6 +307,25 @@ export default function RoutesTable() {
             </Select>
         </div>
         <div className="flex justify-end gap-2 w-full sm:w-auto">
+            <AlertDialog>
+                <AlertDialogTrigger asChild>
+                    <Button variant="outline">
+                        <ArrowRightLeft className="mr-2 h-4 w-4" /> Swap All
+                    </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This action will swap the pickup and destination for ALL routes in the database. This is useful for creating return trips but cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleSwapAll}>Yes, Swap All Routes</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
             <Button variant="outline" onClick={downloadCSV}>
                 <Download className="mr-2 h-4 w-4" /> Download CSV
             </Button>
@@ -477,5 +515,3 @@ export default function RoutesTable() {
     </>
   );
 }
-
-    
