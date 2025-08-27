@@ -49,8 +49,6 @@ export async function POST(req: NextRequest) {
                 paymentStatus: Data.Status,
                 amountPaid: Data.Amount,
             };
-            // Remove fields that are not needed in the final booking
-            delete finalBookingData.createdAt; 
             
             const newBookingRef = doc(collection(db, "bookings"));
             batch.set(newBookingRef, finalBookingData);

@@ -140,7 +140,8 @@ export default function RejectedBookingsTab() {
           <TableRow>
             <TableHead>Passenger</TableHead>
             <TableHead>Route</TableHead>
-            <TableHead>Date</TableHead>
+            <TableHead>Departure Date</TableHead>
+            <TableHead>Booked On</TableHead>
             <TableHead>Reason</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
@@ -151,6 +152,7 @@ export default function RejectedBookingsTab() {
               <TableCell>{booking.name}</TableCell>
               <TableCell>{`${booking.pickup} - ${booking.destination}`}</TableCell>
               <TableCell>{formatDate(booking.date)}</TableCell>
+              <TableCell>{formatDate(booking.createdAt)}</TableCell>
               <TableCell>
                 <Badge variant="destructive">{booking.rejectionReason || 'Rejected'}</Badge>
               </TableCell>
@@ -181,7 +183,7 @@ export default function RejectedBookingsTab() {
           ))}
            {filteredBookings.length === 0 && (
                 <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center text-muted-foreground">
                         No rejected bookings found.
                     </TableCell>
                 </TableRow>

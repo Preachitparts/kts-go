@@ -200,7 +200,8 @@ export default function PaidBookingsTab() {
             <TableHead>Ticket Number</TableHead>
             <TableHead>Passenger</TableHead>
             <TableHead>Route</TableHead>
-            <TableHead>Date</TableHead>
+            <TableHead>Departure Date</TableHead>
+            <TableHead>Booked On</TableHead>
             <TableHead>Amount (GH₵)</TableHead>
             <TableHead>Status</TableHead>
             {userRole === 'Super-Admin' && <TableHead className="text-right">Actions</TableHead>}
@@ -213,6 +214,7 @@ export default function PaidBookingsTab() {
                 <TableCell>{booking.name}</TableCell>
                 <TableCell>{`${booking.pickup} - ${booking.destination}`}</TableCell>
                 <TableCell>{formatDate(booking.date)}</TableCell>
+                <TableCell>{formatDate(booking.createdAt)}</TableCell>
                 <TableCell>{booking.totalAmount.toFixed(2)}</TableCell>
                 <TableCell>
                     <Badge className="bg-green-500">Paid</Badge>

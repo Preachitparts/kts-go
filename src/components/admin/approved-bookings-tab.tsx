@@ -183,7 +183,8 @@ export default function ApprovedBookingsTab() {
           <TableRow>
             <TableHead>Passenger</TableHead>
             <TableHead>Route</TableHead>
-            <TableHead>Date</TableHead>
+            <TableHead>Departure Date</TableHead>
+            <TableHead>Booked On</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
@@ -194,6 +195,7 @@ export default function ApprovedBookingsTab() {
               <TableCell>{booking.name}</TableCell>
               <TableCell>{`${booking.pickup} - ${booking.destination}`}</TableCell>
               <TableCell>{formatDate(booking.date)}</TableCell>
+              <TableCell>{formatDate(booking.createdAt)}</TableCell>
               <TableCell>
                 <Badge className="bg-blue-500">Approved</Badge>
               </TableCell>

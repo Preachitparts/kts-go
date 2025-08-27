@@ -169,6 +169,12 @@ export default function PendingBookingsTab() {
     });
   }, [bookings, selectedRoute, selectedDate]);
 
+  const formatDate = (date: any) => {
+    if (!date) return 'N/A';
+    const dateObj = date.toDate ? date.toDate() : new Date(date);
+    return format(dateObj, "PPP");
+  };
+
   if (loading) {
     return <div>Loading bookings...</div>;
   }
@@ -210,7 +216,8 @@ export default function PendingBookingsTab() {
           <TableRow>
             <TableHead>Passenger</TableHead>
             <TableHead>Route</TableHead>
-            <TableHead>Date</TableHead>
+            <TableHead>Departure Date</TableHead>
+            <TableHead>Booked On</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
@@ -220,7 +227,8 @@ export default function PendingBookingsTab() {
             <TableRow key={booking.id}>
               <TableCell>{booking.name}</TableCell>
               <TableCell>{`${booking.pickup} - ${booking.destination}`}</TableCell>
-              <TableCell>{format(booking.date?.toDate ? booking.date.toDate() : new Date(booking.date), "PPP")}</TableCell>
+              <TableCell>{formatDate(booking.date)}</TableCell>
+              <TableCell>{formatDate(booking.createdAt)}</TableCell>
               <TableCell>
                 <Badge variant="secondary" className="bg-yellow-500">Pending</Badge>
               </TableCell>
@@ -257,7 +265,7 @@ export default function PendingBookingsTab() {
                 </div>
                 <div className="flex items-center gap-2">
                   <CalendarIconAlt className="h-4 w-4 text-muted-foreground" />
-                  <span>{format(selectedBooking.date?.toDate ? selectedBooking.date.toDate() : new Date(selectedBooking.date), "PPP")}</span>
+                  <span>{formatDate(selectedBooking.date)}</span>
                 </div>
                  <div className="flex items-center gap-2 col-span-2">
                   <Ticket className="h-4 w-4 text-muted-foreground" />
