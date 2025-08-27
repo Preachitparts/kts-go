@@ -279,9 +279,14 @@ function LayoutContent({ children }: { children: React.ReactNode}) {
       </Sidebar>
       <SidebarInset>
         <header className="flex items-center justify-between p-4 border-b">
+          <div className="flex items-center gap-2">
             <SidebarTrigger className="md:hidden" />
             <h2 className="text-lg font-semibold">Dashboard</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <SidebarTrigger className="hidden md:flex" />
             <UserCircle />
+          </div>
         </header>
         <main className="p-4 md:p-6 bg-secondary/50 flex-1">
           {children}
