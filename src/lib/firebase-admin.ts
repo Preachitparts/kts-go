@@ -1,17 +1,22 @@
 
 import * as admin from "firebase-admin";
+import { config } from 'dotenv';
 
-const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+// Load environment variables from .env.local
+config();
+
+// Use the correct environment variable for the service account key
+const serviceAccountString = process.env.FIREBASE_ADMIN_SDK_CONFIG;
 
 if (!serviceAccountString) {
-  throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set.");
+  throw new Error("FIREBASE_ADMIN_SDK_CONFIG environment variable is not set. This is required for server-side operations.");
 }
 
 let serviceAccount: admin.ServiceAccount;
 try {
   serviceAccount = JSON.parse(serviceAccountString);
 } catch (error: any) {
-  console.error("Firebase Admin SDK Error: Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY.", error.message);
+  console.error("Firebase Admin SDK Error: Failed to parse FIREBASE_ADMIN_SDK_CONFIG.", error.message);
   throw new Error("Server configuration error: Could not parse Firebase service account key.");
 }
 
