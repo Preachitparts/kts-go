@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
+import { config } from 'dotenv';
+
+// Load environment variables from .env file
+config();
 
 async function getHubtelSettings() {
     const settingsDoc = await adminDb.collection("settings").doc("hubtel").get();
@@ -82,5 +86,3 @@ export async function POST(req: Request) {
     );
   }
 }
-
-    

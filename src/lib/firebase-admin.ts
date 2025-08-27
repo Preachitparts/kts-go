@@ -1,14 +1,10 @@
 
 import * as admin from "firebase-admin";
-import { config } from 'dotenv';
-
-// Load environment variables from .env file
-config();
 
 const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
 
 if (!serviceAccountString) {
-  throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set.");
+  throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set. Please check your .env file.");
 }
 
 try {
@@ -31,5 +27,3 @@ try {
 export const adminDb = admin.firestore();
 export const adminAuth = admin.auth();
 export default admin;
-
-    
