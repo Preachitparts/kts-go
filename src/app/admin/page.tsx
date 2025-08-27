@@ -90,16 +90,22 @@ export default function AdminDashboard() {
 
         const recentBookingsQuery = query(collection(db, "bookings"), orderBy("createdAt", "desc"), limit(5));
         const recentBookingsSnapshot = await getDocs(recentBookingsQuery);
-        const recentActivities = recentBookingsSnapshot.docs.map(doc => {
+        const recentActivities = recentBookingsSnapshot.docs
+          .map(doc => {
             const data = doc.data();
-            return {
+            // Ensure createdAt exists and is a Firestore Timestamp
+            if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+              return {
                 id: doc.id,
                 name: data.name,
                 action: "New Booking",
                 details: `${data.pickup} to ${data.destination}`,
                 timestamp: data.createdAt.toDate(),
-            };
-        });
+              };
+            }
+            return null; // Return null for items that can't be processed
+          })
+          .filter(Boolean) as RecentActivity[]; // Filter out null values
 
         setData({
           totalRevenue,
