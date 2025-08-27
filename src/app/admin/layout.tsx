@@ -137,27 +137,11 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     )
 }
 
-
-export default function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <AuthProvider>
-      <LayoutContent>
-        {children}
-      </LayoutContent>
-    </AuthProvider>
-  )
-}
-
-
 function LayoutContent({ children }: { children: React.ReactNode}) {
   const router = useRouter();
   const pathname = usePathname();
   const auth = getAuth();
-  const { userData } = useAuth(); // No need for user or loading, AuthProvider guarantees they are valid.
+  const { userData } = useAuth();
 
   const handleLogout = async () => {
     try {
@@ -167,11 +151,6 @@ function LayoutContent({ children }: { children: React.ReactNode}) {
       console.error("Logout failed", error);
     }
   };
-
-  // The login page case is handled by AuthProvider, so this is for layout components.
-  if (pathname === "/admin/login") {
-    return null; 
-  }
 
   return (
     <SidebarProvider>
@@ -319,4 +298,18 @@ function LayoutContent({ children }: { children: React.ReactNode}) {
       </SidebarInset>
     </SidebarProvider>
   );
+}
+
+export default function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <AuthProvider>
+      <LayoutContent>
+        {children}
+      </LayoutContent>
+    </AuthProvider>
+  )
 }
