@@ -25,7 +25,6 @@ function getFirebaseAdminApp() {
     });
 }
 
-
 const app = getFirebaseAdminApp();
 export const adminDb = admin.firestore(app);
 export const adminAuth = admin.auth(app);

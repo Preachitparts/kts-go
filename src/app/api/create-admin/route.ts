@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
-import { config } from 'dotenv';
-
-// Load environment variables from .env file
-config();
 
 export async function POST(req: NextRequest) {
     try {
