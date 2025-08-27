@@ -13,7 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Eye, Loader2 } from "lucide-react";
-import { collection, getDocs, query, collectionGroup, where } from "firebase/firestore";
+import { collection, getDocs, query, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -23,7 +23,7 @@ type Session = {
   id: string; 
   routeId: string; 
   busId: string; 
-  departureDate: { toDate: () => Date }; 
+  departureDate: Timestamp; 
   routeName?: string;
   busName?: string;
   bookedSeatsCount?: number;
@@ -61,7 +61,6 @@ export function SessionsWithBookingsTable() {
         ];
 
         const sessionBookingCounts = new Map<string, number>();
-        const sessionIdsFromBookings = new Set<string>();
 
         for (const booking of allBookings) {
             const bookingDate = booking.date?.toDate ? booking.date.toDate() : new Date(booking.date);
