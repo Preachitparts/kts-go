@@ -1,33 +1,33 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import SeatMapManager from "@/components/admin/seat-map-manager";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { adminDb } from "@/lib/firebase-admin";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { Suspense } from "react";
 
 async function getSessionDetails(sessionId: string) {
-    const sessionRef = doc(db, "sessions", sessionId);
-    const sessionSnap = await getDoc(sessionRef);
+    const sessionRef = adminDb.collection("sessions").doc(sessionId);
+    const sessionSnap = await sessionRef.get();
 
-    if (!sessionSnap.exists()) {
+    if (!sessionSnap.exists) {
         return null;
     }
 
     const sessionData = sessionSnap.data();
+    if (!sessionData) return null;
     
     const [routeSnap, busSnap] = await Promise.all([
-        getDoc(doc(db, "routes", sessionData.routeId)),
-        getDoc(doc(db, "buses", sessionData.busId))
+        adminDb.collection("routes").doc(sessionData.routeId).get(),
+        adminDb.collection("buses").doc(sessionData.busId).get()
     ]);
 
     return {
         id: sessionSnap.id,
         ...sessionData,
-        route: routeSnap.exists() ? routeSnap.data() : { pickup: 'Unknown', destination: 'Route' },
-        bus: busSnap.exists() ? busSnap.data() : { numberPlate: 'Unknown Bus', capacity: 0 }
+        route: routeSnap.exists ? routeSnap.data() : { pickup: 'Unknown', destination: 'Route' },
+        bus: busSnap.exists ? busSnap.data() : { numberPlate: 'Unknown Bus', capacity: 0 }
     }
 }
 
