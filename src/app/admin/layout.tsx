@@ -79,22 +79,25 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
                     await signOut(auth);
                     setUser(null);
                     setUserData(null);
-                    if (pathname !== '/admin/login') {
-                        router.push("/admin/login");
-                    }
                 }
             } else {
                 setUser(null);
                 setUserData(null);
-                if (pathname !== '/admin/login') {
-                    router.push("/admin/login");
-                }
             }
             setLoading(false);
         });
         return () => unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [auth]);
+
+    useEffect(() => {
+        if (!loading) {
+            if (user && pathname === '/admin/login') {
+                router.push('/admin');
+            } else if (!user && pathname !== '/admin/login') {
+                router.push('/admin/login');
+            }
+        }
+    }, [user, loading, pathname, router]);
     
     if (loading) {
         return (
@@ -104,16 +107,13 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
         );
     }
     
-    // If not logged in and not on the login page, the redirect will be handled by the effect.
-    // We return null to prevent rendering children until auth state is resolved.
+    // Prevent rendering children if redirection is imminent
     if (!user && pathname !== '/admin/login') {
          return null;
     }
 
-    // If on login page and already logged in, redirect to dashboard
     if (user && pathname === '/admin/login') {
-        router.push('/admin');
-        return null; // Return null while redirecting
+        return null;
     }
 
     return (
