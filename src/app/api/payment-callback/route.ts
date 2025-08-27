@@ -1,6 +1,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { doc, collection, addDoc, setDoc, deleteDoc, query, where, getDocs, updateDoc } from "firebase/firestore";
+import { doc, collection, addDoc, setDoc, deleteDoc, getDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 export async function POST(req: NextRequest) {
@@ -29,12 +29,13 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ message: "Acknowledged: Booking not found or already processed." });
         }
         
+        const bookingDetails = pendingBookingDoc.data();
+        const batch = writeBatch(db);
+
         if (Status === "Success" && ResponseCode === "0000") {
-            const bookingDetails = pendingBookingDoc.data();
-            
             // 1. Save passenger info
             const passengerRef = doc(db, "passengers", bookingDetails.phone);
-            await setDoc(passengerRef, {
+            batch.set(passengerRef, {
                 name: bookingDetails.name,
                 phone: bookingDetails.phone,
                 emergencyContact: bookingDetails.emergencyContact,
@@ -51,24 +52,29 @@ export async function POST(req: NextRequest) {
             // Remove fields that are not needed in the final booking
             delete finalBookingData.createdAt; 
             
-            await addDoc(collection(db, "bookings"), finalBookingData);
+            const newBookingRef = doc(collection(db, "bookings"));
+            batch.set(newBookingRef, finalBookingData);
 
             // 3. Delete the pending booking
-            await deleteDoc(pendingBookingRef);
+            batch.delete(pendingBookingRef);
             
+            await batch.commit();
+
             console.log(`Successfully processed booking for ClientReference: ${clientReference}`);
             return NextResponse.json({ message: "Callback received and processed successfully." });
         } else {
             // Payment failed or was cancelled
-            const bookingDetails = pendingBookingDoc.data();
             const rejectedBookingData = {
                 ...bookingDetails,
                 status: 'rejected',
                 rejectionReason: `Payment failed with Hubtel status: ${Status}`,
             };
-            await addDoc(collection(db, "rejected_bookings"), rejectedBookingData);
+            const rejectedDocRef = doc(collection(db, "rejected_bookings"));
+            batch.set(rejectedDocRef, rejectedBookingData);
             
-            await deleteDoc(pendingBookingRef);
+            batch.delete(pendingBookingRef);
+            await batch.commit();
+
             console.warn(`Payment failed or was cancelled for ClientReference: ${clientReference}. Status: ${Status}, ResponseCode: ${ResponseCode}`);
             return NextResponse.json({ message: "Payment was not successful. Booking cancelled." });
         }
