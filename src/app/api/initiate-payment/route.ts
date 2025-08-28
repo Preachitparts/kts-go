@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     const clientId = settings.liveMode ? settings.clientId : settings.testClientId;
     const secretKey = settings.liveMode ? settings.secretKey : settings.testSecretKey;
     const accountNumber = settings.liveMode ? settings.accountId : settings.testAccountId;
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+    const baseUrl = process.env.BASE_URL;
 
     if (!clientId || !secretKey || !accountNumber) {
         console.error("Missing Hubtel API credentials in settings.");
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     }
     
     if (!baseUrl) {
-        console.error("NEXT_PUBLIC_BASE_URL is not defined in environment variables.");
+        console.error("BASE_URL is not defined in environment variables.");
         return NextResponse.json(
             { success: false, error: "Server configuration error: Base URL is not set." },
             { status: 500 }
