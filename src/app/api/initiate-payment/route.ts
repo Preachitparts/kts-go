@@ -3,11 +3,17 @@ import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 
 async function getHubtelSettings() {
-    const settingsDoc = await adminDb.collection("settings").doc("hubtel").get();
-    if (!settingsDoc.exists) {
-        throw new Error("Hubtel settings not found in Firestore.");
+    try {
+        const settingsDoc = await adminDb.collection("settings").doc("hubtel").get();
+        if (!settingsDoc.exists) {
+            console.error("Hubtel settings not found in Firestore.");
+            return null;
+        }
+        return settingsDoc.data();
+    } catch (error) {
+        console.error("Error fetching Hubtel settings from Firestore:", error);
+        return null;
     }
-    return settingsDoc.data();
 }
 
 export async function POST(req: Request) {
@@ -33,10 +39,20 @@ export async function POST(req: Request) {
     const clientId = settings.liveMode ? settings.clientId : settings.testClientId;
     const secretKey = settings.liveMode ? settings.secretKey : settings.testSecretKey;
     const accountNumber = settings.liveMode ? settings.accountId : settings.testAccountId;
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
 
     if (!clientId || !secretKey || !accountNumber) {
+        console.error("Missing Hubtel API credentials in settings.");
         return NextResponse.json(
             { success: false, error: "Hubtel API keys are not configured correctly in the admin settings." },
+            { status: 500 }
+        );
+    }
+    
+    if (!baseUrl) {
+        console.error("NEXT_PUBLIC_BASE_URL is not defined in environment variables.");
+        return NextResponse.json(
+            { success: false, error: "Server configuration error: Base URL is not set." },
             { status: 500 }
         );
     }
@@ -51,9 +67,9 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         totalAmount: totalAmount,
         description: description,
-        callbackUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/api/payment-callback`,
-        returnUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/booking-confirmation?ref=${clientReference}`,
-        cancellationUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/?error=payment_failed`,
+        callbackUrl: `${baseUrl}/api/payment-callback`,
+        returnUrl: `${baseUrl}/booking-confirmation?ref=${clientReference}`,
+        cancellationUrl: `${baseUrl}/?error=payment_failed`,
         merchantAccountNumber: accountNumber,
         clientReference: clientReference,
         customerMsisdn: phone,
