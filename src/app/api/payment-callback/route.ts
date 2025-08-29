@@ -84,15 +84,21 @@ export async function GET(req: NextRequest) {
     const clientReference = searchParams.get('ref');
 
     if (clientReference) {
+        // CRITICAL FIX: Use an absolute URL for redirection.
+        // req.url gives the full URL of the current request, e.g., "https://<host>/api/payment-callback?ref=..."
+        // We use this to construct the base for our final redirect URL.
         const confirmationUrl = new URL('/booking-confirmation', req.url);
         confirmationUrl.searchParams.append('ref', clientReference);
         return NextResponse.redirect(confirmationUrl);
     }
 
+    // Handle cases where the user returns without a reference (e.g., payment cancelled)
     const error = searchParams.get('error');
     const redirectUrl = new URL('/', req.url);
     if (error) {
         redirectUrl.searchParams.append('error', error);
+    } else {
+        redirectUrl.searchParams.append('error', 'payment_failed');
     }
     return NextResponse.redirect(redirectUrl);
 }
