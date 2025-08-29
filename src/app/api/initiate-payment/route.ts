@@ -1,25 +1,5 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase-admin";
-
-// Function to get Hubtel settings from Firestore
-async function getHubtelSettings() {
-    console.log("Attempting to load Hubtel settings from Firestore...");
-    try {
-        const settingsDoc = await adminDb.collection("settings").doc("hubtel").get();
-        if (!settingsDoc.exists) {
-            console.error("CRITICAL: Hubtel settings document not found in Firestore.");
-            throw new Error("Hubtel settings not found. Please configure them in the admin panel.");
-        }
-        const settings = settingsDoc.data();
-        console.log("Hubtel settings loaded successfully.");
-        return settings;
-    } catch (error) {
-        console.error("CRITICAL: Error loading Hubtel settings from Firestore:", error);
-        // Re-throw to be caught by the main handler
-        throw new Error("Could not load payment provider settings from the server.");
-    }
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -33,7 +13,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Missing required payment fields." }, { status: 400 });
     }
 
-    // Check for NEXT_PUBLIC_BASE_URL
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
     if (!baseUrl) {
         console.error("CRITICAL: NEXT_PUBLIC_BASE_URL environment variable is not set.");
@@ -41,14 +20,14 @@ export async function POST(req: NextRequest) {
     }
     console.log("Using Base URL for callbacks:", baseUrl);
 
-    // Fetch Hubtel settings
-    const settings = await getHubtelSettings();
-    const clientId = settings?.liveMode ? settings?.clientId : settings?.testClientId;
-    const secretKey = settings?.liveMode ? settings?.secretKey : settings?.testSecretKey;
-    const accountNumber = settings?.liveMode ? settings?.accountId : settings?.testAccountId;
+    // Get Hubtel settings from environment variables
+    const isLiveMode = process.env.HUBTEL_LIVE_MODE === 'true';
+    const clientId = isLiveMode ? process.env.HUBTEL_CLIENT_ID : process.env.HUBTEL_TEST_CLIENT_ID;
+    const secretKey = isLiveMode ? process.env.HUBTEL_SECRET_KEY : process.env.HUBTEL_TEST_SECRET_KEY;
+    const accountNumber = isLiveMode ? process.env.HUBTEL_ACCOUNT_ID : process.env.HUBTEL_TEST_ACCOUNT_ID;
 
     if (!clientId || !secretKey || !accountNumber) {
-        console.error("Hubtel API keys are not configured correctly in admin settings.", { liveMode: settings?.liveMode });
+        console.error("Hubtel API keys are not configured correctly in environment variables.");
         return NextResponse.json({ success: false, error: "Payment gateway is not configured correctly. Please contact support." }, { status: 500 });
     }
 
@@ -92,7 +71,6 @@ export async function POST(req: NextRequest) {
         error: err.message,
         stack: err.stack,
     });
-    // This is the crucial part: always return a JSON error, never crash.
     return NextResponse.json(
       { success: false, error: "An internal server error occurred. Please try again later." },
       { status: 500 }
