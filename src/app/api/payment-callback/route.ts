@@ -82,8 +82,8 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
-    // Hubtel returns the client reference in a parameter named `clientreference` (lowercase) on the GET redirect.
-    const clientReference = searchParams.get('clientreference') || searchParams.get('ref');
+    // CORRECTED: Hubtel returns the client reference in a parameter named `ref`.
+    const clientReference = searchParams.get('ref');
 
     if (clientReference) {
         // CRITICAL FIX: Use an absolute URL for redirection.
@@ -91,6 +91,7 @@ export async function GET(req: NextRequest) {
         // We use this to construct the base for our final redirect URL.
         const confirmationUrl = new URL('/booking-confirmation', req.url);
         confirmationUrl.searchParams.append('ref', clientReference);
+        console.log(`Redirecting user to confirmation page: ${confirmationUrl.toString()}`);
         return NextResponse.redirect(confirmationUrl);
     }
 
@@ -102,5 +103,6 @@ export async function GET(req: NextRequest) {
     } else {
         redirectUrl.searchParams.append('error', 'payment_failed');
     }
+    console.log(`Redirecting user to home page with error: ${redirectUrl.toString()}`);
     return NextResponse.redirect(redirectUrl);
 }
