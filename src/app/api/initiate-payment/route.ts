@@ -31,11 +31,14 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, error: "Payment gateway is not configured correctly. Please contact support." }, { status: 500 });
     }
 
+    const returnUrl = `${baseUrl}/booking-confirmation?ref=${clientReference}`;
+    console.log(`Constructed returnUrl for Hubtel: ${returnUrl}`); // Added for debugging
+
     const hubtelPayload = {
         totalAmount: totalAmount,
         description: description,
         callbackUrl: `${baseUrl}/api/payment-callback`,
-        returnUrl: `${baseUrl}/booking-confirmation?ref=${clientReference}`,
+        returnUrl: returnUrl,
         cancellationUrl: `${baseUrl}/?error=payment_failed`,
         merchantAccountNumber: accountNumber,
         clientReference: clientReference,
