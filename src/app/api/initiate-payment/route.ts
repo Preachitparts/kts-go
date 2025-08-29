@@ -1,5 +1,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
+import { adminDb } from "@/lib/firebase-admin";
 
 export async function POST(req: NextRequest) {
   try {
@@ -31,13 +32,17 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, error: "Payment gateway is not configured correctly. Please contact support." }, { status: 500 });
     }
 
-    const returnUrl = `${baseUrl}/booking-confirmation?ref=${clientReference}`;
-    console.log(`Constructed returnUrl for Hubtel: ${returnUrl}`); // Added for debugging
+    // CORRECTED: Both callbackUrl and returnUrl should point to the API handler.
+    const callbackUrl = `${baseUrl}/api/payment-callback`;
+    const returnUrl = `${callbackUrl}?ref=${clientReference}`;
+    
+    console.log(`Constructed callbackUrl for Hubtel: ${callbackUrl}`);
+    console.log(`Constructed returnUrl for Hubtel: ${returnUrl}`);
 
     const hubtelPayload = {
         totalAmount: totalAmount,
         description: description,
-        callbackUrl: `${baseUrl}/api/payment-callback`,
+        callbackUrl: callbackUrl,
         returnUrl: returnUrl,
         cancellationUrl: `${baseUrl}/?error=payment_failed`,
         merchantAccountNumber: accountNumber,
