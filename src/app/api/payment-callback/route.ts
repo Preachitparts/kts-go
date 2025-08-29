@@ -10,16 +10,15 @@ export async function POST(req: NextRequest) {
         // Log the entire callback for debugging
         console.log("Received Hubtel Callback:", JSON.stringify(callbackData, null, 2));
 
-        // CORRECTED: Use lowercase keys to match Hubtel's response
-        const { responseCode, status, data } = callbackData;
-        const clientReference = data?.clientReference;
+        // CORRECTED: Use capitalized keys and correct nesting to match Hubtel's response
+        const { ResponseCode, Status, Data } = callbackData;
+        const clientReference = Data?.ClientReference;
 
         if (!clientReference) {
-            console.error("Callback Error: clientReference not found in Hubtel callback.");
-            return NextResponse.json({ error: "Invalid callback data" }, { status: 400 });
+            console.error("Callback Error: ClientReference not found in Hubtel callback.", { callbackData });
+            return NextResponse.json({ error: "Invalid callback data: ClientReference missing." }, { status: 400 });
         }
 
-        // CORRECTED: Query for the booking using the clientReference field
         const pendingBookingsQuery = query(
             collection(db, "pending_bookings"),
             where("clientReference", "==", clientReference)
@@ -27,20 +26,18 @@ export async function POST(req: NextRequest) {
         const pendingBookingsSnapshot = await getDocs(pendingBookingsQuery);
 
         if (pendingBookingsSnapshot.empty) {
-            console.warn(`Callback Warning: Pending booking not found for ClientReference: ${clientReference}. It might have already been processed.`);
-            // Acknowledge receipt to Hubtel even if we can't find the booking
+            console.warn(`Callback Warning: Pending booking not found for ClientReference: ${clientReference}. It might have already been processed or cancelled.`);
             return NextResponse.json({ message: "Acknowledged: Booking not found or already processed." });
         }
 
         const pendingBookingDoc = pendingBookingsSnapshot.docs[0];
-        
-        // CORRECTED: Check lowercase status and correct response codes
-        if (status === "Success" && (responseCode === "0000" || responseCode === "000")) {
-            const bookingDetails = pendingBookingDoc.data();
-            
+        const bookingDetails = pendingBookingDoc.data();
+
+        // Check for successful payment status
+        if (Status === "Success" && (ResponseCode === "0000" || ResponseCode === "000")) {
             const batch = writeBatch(db);
 
-            // 1. Save passenger info
+            // 1. Save passenger info to the passengers collection
             const passengerRef = doc(db, "passengers", bookingDetails.phone);
             batch.set(passengerRef, {
                 name: bookingDetails.name,
@@ -48,21 +45,21 @@ export async function POST(req: NextRequest) {
                 emergencyContact: bookingDetails.emergencyContact,
             }, { merge: true });
 
-            // 2. Create the final booking
+            // 2. Create the final booking in the 'bookings' collection
             const finalBookingData: any = { 
                 ...bookingDetails, 
                 status: 'paid',
-                hubtelTransactionId: data.checkoutId, // Save Hubtel's ID
-                paymentStatus: data.status,
-                amountPaid: data.amount,
-                createdAt: bookingDetails.createdAt || new Date(), // Ensure createdAt is present
+                hubtelTransactionId: Data.TransactionId, // Save Hubtel's ID
+                paymentStatus: Status,
+                amountPaid: Data.Amount,
+                createdAt: bookingDetails.createdAt || new Date(),
             };
             delete finalBookingData.id; 
             
             const newBookingRef = doc(collection(db, "bookings"));
             batch.set(newBookingRef, finalBookingData);
 
-            // 3. Delete the pending booking
+            // 3. Delete the original pending booking
             batch.delete(pendingBookingDoc.ref);
             
             await batch.commit();
@@ -71,11 +68,10 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ message: "Callback received and processed successfully." });
         } else {
             // Payment failed or was cancelled
-            const bookingDetails = pendingBookingDoc.data();
             const rejectedBookingData = {
                 ...bookingDetails,
                 status: 'rejected',
-                rejectionReason: `Payment failed with Hubtel status: ${status}`,
+                rejectionReason: `Payment failed or was cancelled. Status: ${Status}, Message: ${Data.Message}`,
             };
             
             const batch = writeBatch(db);
@@ -87,32 +83,30 @@ export async function POST(req: NextRequest) {
             
             await batch.commit();
 
-            console.warn(`Payment failed or was cancelled for ClientReference: ${clientReference}. Status: ${status}, ResponseCode: ${responseCode}`);
-            return NextResponse.json({ message: "Payment was not successful. Booking cancelled." });
+            console.warn(`Payment failed for ClientReference: ${clientReference}. Status: ${Status}, ResponseCode: ${ResponseCode}`);
+            return NextResponse.json({ message: "Payment was not successful. Booking has been moved to rejected." });
         }
 
     } catch (error: any) {
-        console.error("Callback Processing Error:", error);
+        console.error("CRITICAL Callback Processing Error:", {
+            message: error.message,
+            stack: error.stack,
+        });
         return NextResponse.json({ error: "Internal server error processing callback" }, { status: 500 });
     }
 }
 
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
-    // CORRECTED: Hubtel returns the client reference in a parameter named `ref`.
     const clientReference = searchParams.get('ref');
 
     if (clientReference) {
-        // CRITICAL FIX: Use an absolute URL for redirection.
-        // req.url gives the full URL of the current request, e.g., "https://<host>/api/payment-callback?ref=..."
-        // We use this to construct the base for our final redirect URL.
         const confirmationUrl = new URL('/booking-confirmation', req.url);
         confirmationUrl.searchParams.append('ref', clientReference);
         console.log(`Redirecting user to confirmation page: ${confirmationUrl.toString()}`);
         return NextResponse.redirect(confirmationUrl);
     }
 
-    // Handle cases where the user returns without a reference (e.g., payment cancelled)
     const error = searchParams.get('error');
     const redirectUrl = new URL('/', req.url);
     if (error) {
