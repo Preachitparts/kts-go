@@ -287,10 +287,8 @@ export function BookingForm() {
         const pendingDocRef = doc(collection(db, "pending_bookings"));
         pendingBookingId = pendingDocRef.id;
 
-        const batch = writeBatch(db);
-        batch.set(pendingDocRef, { ...pendingBookingData, clientReference: pendingBookingId });
-        await batch.commit();
-
+        await setDoc(pendingDocRef, { ...pendingBookingData, clientReference: pendingBookingId });
+        
         const response = await fetch('/api/initiate-payment', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -312,22 +310,12 @@ export function BookingForm() {
 
     } catch (error: any) {
       console.error("Error during booking process:", error);
-      if (pendingBookingId) {
-          const pendingDocRef = doc(db, "pending_bookings", pendingBookingId);
-          const rejectedDocRef = doc(collection(db, "rejected_bookings"));
-          const bookingSnapshot = await getDoc(pendingDocRef);
-          if (bookingSnapshot.exists()) {
-            const bookingData = bookingSnapshot.data();
-            const batch = writeBatch(db);
-            batch.set(rejectedDocRef, {...bookingData, rejectionReason: "Payment initiation failed"});
-            batch.delete(pendingDocRef);
-            await batch.commit();
-          }
-      }
+      // NOTE: We no longer move the booking to rejected here.
+      // The `releaseExpiredSeats` function will handle timed-out pending bookings.
       toast({
         variant: "destructive",
-        title: "Booking Failed",
-        description: error.message || "Something went wrong. Please try again.",
+        title: "Booking Error",
+        description: error.message || "Could not generate payment link. Please try again.",
       });
     } finally {
       setIsSubmitting(false);
