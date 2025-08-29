@@ -199,7 +199,7 @@ export function BookingForm() {
 
   React.useEffect(() => {
     const fetchOccupiedSeats = async () => {
-        if (!selectedBusId || !selectedDate) {
+        if (!selectedBusId || !selectedDate || !selectedRouteId) {
             setOccupiedSeats([]);
             return;
         }
@@ -209,8 +209,8 @@ export function BookingForm() {
 
             const targetDate = format(selectedDate, "yyyy-MM-dd");
 
-            const paidQuery = query(collection(db, "bookings"), where("busId", "==", selectedBusId));
-            const pendingQuery = query(collection(db, "pending_bookings"), where("busId", "==", selectedBusId));
+            const paidQuery = query(collection(db, "bookings"), where("busId", "==", selectedBusId), where("routeId", "==", selectedRouteId));
+            const pendingQuery = query(collection(db, "pending_bookings"), where("busId", "==", selectedBusId), where("routeId", "==", selectedRouteId));
 
             const [paidSnapshot, pendingSnapshot] = await Promise.all([
                 getDocs(paidQuery),
@@ -237,7 +237,7 @@ export function BookingForm() {
     };
 
     fetchOccupiedSeats();
-  }, [selectedBusId, selectedDate, toast]);
+  }, [selectedBusId, selectedDate, selectedRouteId, toast]);
 
 
   const selectedRoute = React.useMemo(() => {
@@ -600,5 +600,3 @@ export function BookingForm() {
     </Form>
   );
 }
-
-    

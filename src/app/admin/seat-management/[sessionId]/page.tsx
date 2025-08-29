@@ -76,7 +76,8 @@ export default async function SeatMapPage({ params }: { params: { sessionId: str
                 <CardContent>
                     <Suspense fallback={<div>Loading seat map...</div>}>
                         <SeatMapManager 
-                            busId={sessionDetails.busId} 
+                            busId={sessionDetails.busId}
+                            routeId={sessionDetails.routeId} 
                             busCapacity={sessionDetails.bus.capacity}
                             departureDate={departureDate} 
                         />

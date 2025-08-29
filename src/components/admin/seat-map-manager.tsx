@@ -54,9 +54,10 @@ type SeatMapManagerProps = {
     busId: string;
     busCapacity: number;
     departureDate: Date;
+    routeId: string;
 }
 
-export default function SeatMapManager({ busId, busCapacity, departureDate }: SeatMapManagerProps) {
+export default function SeatMapManager({ busId, busCapacity, departureDate, routeId }: SeatMapManagerProps) {
   const { toast } = useToast();
   const [loadingSeats, setLoadingSeats] = React.useState(true);
   const [allBookings, setAllBookings] = React.useState<Booking[]>([]);
@@ -73,8 +74,8 @@ export default function SeatMapManager({ busId, busCapacity, departureDate }: Se
 
         const targetDate = format(departureDate, "yyyy-MM-dd");
 
-        const paidQuery = query(collection(db, "bookings"), where("busId", "==", busId));
-        const pendingQuery = query(collection(db, "pending_bookings"), where("busId", "==", busId));
+        const paidQuery = query(collection(db, "bookings"), where("busId", "==", busId), where("routeId", "==", routeId));
+        const pendingQuery = query(collection(db, "pending_bookings"), where("busId", "==", busId), where("routeId", "==", routeId));
         
         const [paidSnapshot, pendingSnapshot] = await Promise.all([getDocs(paidQuery), getDocs(pendingQuery)]);
         
@@ -93,7 +94,7 @@ export default function SeatMapManager({ busId, busCapacity, departureDate }: Se
     } finally {
         setLoadingSeats(false);
     }
-}, [busId, departureDate, toast]);
+}, [busId, departureDate, routeId, toast]);
 
 
   React.useEffect(() => {
