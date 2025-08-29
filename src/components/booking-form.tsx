@@ -8,7 +8,7 @@ import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import React from "react";
-import { collection, getDocs, query, where, doc, writeBatch, Timestamp, addDoc, serverTimestamp, getDoc } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, writeBatch, Timestamp, addDoc, serverTimestamp, getDoc, setDoc } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import {
