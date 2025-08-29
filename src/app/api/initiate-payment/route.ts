@@ -32,9 +32,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, error: "Payment gateway is not configured correctly. Please contact support." }, { status: 500 });
     }
 
-    // CORRECTED: Both callbackUrl and returnUrl should point to the API handler.
     const callbackUrl = `${baseUrl}/api/payment-callback`;
-    const returnUrl = `${callbackUrl}?ref=${clientReference}`;
+    // CORRECTED: The returnUrl should be clean. Hubtel will append its own parameters.
+    // Our GET handler in the callback route is designed to pick up the `ref` from Hubtel's redirect.
+    const returnUrl = `${baseUrl}/api/payment-callback`;
     
     console.log(`Constructed callbackUrl for Hubtel: ${callbackUrl}`);
     console.log(`Constructed returnUrl for Hubtel: ${returnUrl}`);
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
         description: description,
         callbackUrl: callbackUrl,
         returnUrl: returnUrl,
-        cancellationUrl: `${baseUrl}/?error=payment_failed`,
+        cancellationUrl: `${baseUrl}/?error=payment_cancelled&ref=${clientReference}`,
         merchantAccountNumber: accountNumber,
         clientReference: clientReference,
         customerMsisdn: phone,

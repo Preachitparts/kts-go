@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ message: "Acknowledged: Booking not found or already processed." });
         }
         
-        if (Status === "Success" && ResponseCode === "0000") {
+        if (Status === "Success" && (ResponseCode === "0000" || ResponseCode === "000")) {
             const bookingDetails = pendingBookingDoc.data();
             
             // 1. Save passenger info
@@ -47,9 +47,10 @@ export async function POST(req: NextRequest) {
                 hubtelTransactionId: Data.CheckoutId, // Save Hubtel's ID
                 paymentStatus: Data.Status,
                 amountPaid: Data.Amount,
+                createdAt: bookingDetails.createdAt || new Date(), // Ensure createdAt is present
             };
             // Remove fields that are not needed in the final booking
-            delete finalBookingData.createdAt; 
+            delete finalBookingData.id; 
             
             await addDoc(collection(db, "bookings"), finalBookingData);
 
@@ -81,7 +82,8 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
-    const clientReference = searchParams.get('ref');
+    // Hubtel returns the client reference in a parameter named `clientreference` (lowercase) on the GET redirect.
+    const clientReference = searchParams.get('clientreference') || searchParams.get('ref');
 
     if (clientReference) {
         // CRITICAL FIX: Use an absolute URL for redirection.
