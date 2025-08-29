@@ -2,61 +2,55 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 
+// Function to get Hubtel settings from Firestore
 async function getHubtelSettings() {
     console.log("Attempting to load Hubtel settings from Firestore...");
     try {
         const settingsDoc = await adminDb.collection("settings").doc("hubtel").get();
         if (!settingsDoc.exists) {
             console.error("CRITICAL: Hubtel settings document not found in Firestore.");
-            throw new Error("Hubtel settings not found in Firestore. Please configure payment settings in the admin panel.");
+            throw new Error("Hubtel settings not found. Please configure them in the admin panel.");
         }
         const settings = settingsDoc.data();
         console.log("Hubtel settings loaded successfully.");
         return settings;
     } catch (error) {
         console.error("CRITICAL: Error loading Hubtel settings from Firestore:", error);
-        throw error; // Re-throw the error to be caught by the main handler
+        // Re-throw to be caught by the main handler
+        throw new Error("Could not load payment provider settings from the server.");
     }
 }
 
 export async function POST(req: NextRequest) {
-  let requestBody;
   try {
-    requestBody = await req.json();
+    const requestBody = await req.json();
     console.log("Payment initiation request received for clientReference:", requestBody.clientReference);
 
     const { totalAmount, description, clientReference, phone } = requestBody;
 
     if (!totalAmount || !description || !clientReference || !phone) {
-      const errorMsg = "Missing required payment fields.";
-      console.error(errorMsg, { received: requestBody });
-      return NextResponse.json({ success: false, error: errorMsg }, { status: 400 });
+      console.error("Missing required payment fields.", { received: requestBody });
+      return NextResponse.json({ success: false, error: "Missing required payment fields." }, { status: 400 });
     }
 
-    const settings = await getHubtelSettings();
-    if (!settings) {
-        const errorMsg = "Hubtel settings could not be loaded from the server.";
-        console.error(errorMsg);
-        return NextResponse.json({ success: false, error: errorMsg }, { status: 500 });
-    }
-
-    const clientId = settings.liveMode ? settings.clientId : settings.testClientId;
-    const secretKey = settings.liveMode ? settings.secretKey : settings.testSecretKey;
-    const accountNumber = settings.liveMode ? settings.accountId : settings.testAccountId;
-
-    if (!clientId || !secretKey || !accountNumber) {
-        const errorMsg = "Hubtel API keys are not configured correctly in admin settings.";
-        console.error(errorMsg, { liveMode: settings.liveMode });
-        return NextResponse.json({ success: false, error: errorMsg }, { status: 500 });
-    }
-
+    // Check for NEXT_PUBLIC_BASE_URL
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
     if (!baseUrl) {
-        const errorMsg = "NEXT_PUBLIC_BASE_URL environment variable is not set.";
-        console.error(errorMsg);
-        return NextResponse.json({ success: false, error: errorMsg }, { status: 500 });
+        console.error("CRITICAL: NEXT_PUBLIC_BASE_URL environment variable is not set.");
+        return NextResponse.json({ success: false, error: "Server configuration error: Base URL is not set." }, { status: 500 });
     }
-     console.log("Using Base URL for callbacks:", baseUrl);
+    console.log("Using Base URL for callbacks:", baseUrl);
+
+    // Fetch Hubtel settings
+    const settings = await getHubtelSettings();
+    const clientId = settings?.liveMode ? settings?.clientId : settings?.testClientId;
+    const secretKey = settings?.liveMode ? settings?.secretKey : settings?.testSecretKey;
+    const accountNumber = settings?.liveMode ? settings?.accountId : settings?.testAccountId;
+
+    if (!clientId || !secretKey || !accountNumber) {
+        console.error("Hubtel API keys are not configured correctly in admin settings.", { liveMode: settings?.liveMode });
+        return NextResponse.json({ success: false, error: "Payment gateway is not configured correctly. Please contact support." }, { status: 500 });
+    }
 
     const hubtelPayload = {
         totalAmount: totalAmount,
@@ -82,11 +76,8 @@ export async function POST(req: NextRequest) {
     const hubtelData = await hubtelRes.json();
     
     if (!hubtelRes.ok || hubtelData.status !== "Success") {
-      const errorMsg = `Hubtel payment initiation failed: ${hubtelData.message || hubtelData.responseText || 'Unknown error'}`;
-      console.error("Hubtel Error Response:", {
-          status: hubtelRes.status,
-          response: hubtelData
-      });
+      const errorMsg = `Payment provider error: ${hubtelData.message || hubtelData.responseText || 'Unknown error'}`;
+      console.error("Hubtel Error Response:", { status: hubtelRes.status, response: hubtelData });
       return NextResponse.json({ success: false, error: errorMsg, details: hubtelData }, { status: 500 });
     }
 
@@ -95,14 +86,15 @@ export async function POST(req: NextRequest) {
       success: true,
       paymentUrl: hubtelData.data.checkoutUrl,
     });
+
   } catch (err: any) {
     console.error("CRITICAL: Unhandled exception in initiate-payment API:", {
         error: err.message,
         stack: err.stack,
-        requestBody: requestBody || 'Could not parse request body'
     });
+    // This is the crucial part: always return a JSON error, never crash.
     return NextResponse.json(
-      { success: false, error: "Internal Server Error. Check server logs for details.", details: err.message },
+      { success: false, error: "An internal server error occurred. Please try again later." },
       { status: 500 }
     );
   }
