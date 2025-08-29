@@ -10,11 +10,12 @@ export async function POST(req: NextRequest) {
         // Log the entire callback for debugging
         console.log("Received Hubtel Callback:", JSON.stringify(callbackData, null, 2));
 
-        const { ResponseCode, Status, Data } = callbackData;
-        const clientReference = Data?.ClientReference;
+        // CORRECTED: Use lowercase keys to match Hubtel's response
+        const { responseCode, status, data } = callbackData;
+        const clientReference = data?.clientReference;
 
         if (!clientReference) {
-            console.error("Callback Error: ClientReference not found in Hubtel callback.");
+            console.error("Callback Error: clientReference not found in Hubtel callback.");
             return NextResponse.json({ error: "Invalid callback data" }, { status: 400 });
         }
 
@@ -33,7 +34,8 @@ export async function POST(req: NextRequest) {
 
         const pendingBookingDoc = pendingBookingsSnapshot.docs[0];
         
-        if (Status === "Success" && (ResponseCode === "0000" || ResponseCode === "000")) {
+        // CORRECTED: Check lowercase status and correct response codes
+        if (status === "Success" && (responseCode === "0000" || responseCode === "000")) {
             const bookingDetails = pendingBookingDoc.data();
             
             const batch = writeBatch(db);
@@ -50,9 +52,9 @@ export async function POST(req: NextRequest) {
             const finalBookingData: any = { 
                 ...bookingDetails, 
                 status: 'paid',
-                hubtelTransactionId: Data.CheckoutId, // Save Hubtel's ID
-                paymentStatus: Data.Status,
-                amountPaid: Data.Amount,
+                hubtelTransactionId: data.checkoutId, // Save Hubtel's ID
+                paymentStatus: data.status,
+                amountPaid: data.amount,
                 createdAt: bookingDetails.createdAt || new Date(), // Ensure createdAt is present
             };
             delete finalBookingData.id; 
@@ -73,7 +75,7 @@ export async function POST(req: NextRequest) {
             const rejectedBookingData = {
                 ...bookingDetails,
                 status: 'rejected',
-                rejectionReason: `Payment failed with Hubtel status: ${Status}`,
+                rejectionReason: `Payment failed with Hubtel status: ${status}`,
             };
             
             const batch = writeBatch(db);
@@ -85,7 +87,7 @@ export async function POST(req: NextRequest) {
             
             await batch.commit();
 
-            console.warn(`Payment failed or was cancelled for ClientReference: ${clientReference}. Status: ${Status}, ResponseCode: ${ResponseCode}`);
+            console.warn(`Payment failed or was cancelled for ClientReference: ${clientReference}. Status: ${status}, ResponseCode: ${responseCode}`);
             return NextResponse.json({ message: "Payment was not successful. Booking cancelled." });
         }
 
