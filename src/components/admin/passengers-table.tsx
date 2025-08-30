@@ -19,6 +19,7 @@ type Passenger = {
     id: string;
     name: string;
     phone: string;
+    email?: string;
     emergencyContact: string;
 };
 
@@ -46,13 +47,14 @@ export default function PassengersTable() {
   }, [toast]);
 
   const downloadCSV = () => {
-    const headers = ["Name", "Phone", "Emergency Contact"];
+    const headers = ["Name", "Phone", "Email", "Emergency Contact"];
     const csvContent = [
       headers.join(","),
       ...passengers.map(p => 
         [
           `"${p.name}"`,
           `"${p.phone}"`,
+          `"${p.email || 'N/A'}"`,
           `"${p.emergencyContact}"`
         ].join(",")
       )
@@ -88,6 +90,7 @@ export default function PassengersTable() {
             <TableRow>
             <TableHead>Name</TableHead>
             <TableHead>Phone</TableHead>
+            <TableHead>Email</TableHead>
             <TableHead>Emergency Contact</TableHead>
             </TableRow>
         </TableHeader>
@@ -96,6 +99,7 @@ export default function PassengersTable() {
             <TableRow key={passenger.id}>
                 <TableCell>{passenger.name}</TableCell>
                 <TableCell>{passenger.phone}</TableCell>
+                <TableCell>{passenger.email || 'N/A'}</TableCell>
                 <TableCell>{passenger.emergencyContact}</TableCell>
             </TableRow>
             ))}
@@ -104,3 +108,5 @@ export default function PassengersTable() {
     </>
   );
 }
+
+    

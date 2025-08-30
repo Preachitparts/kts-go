@@ -3,7 +3,7 @@
 
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Bus, User, Phone, MapPin, Calendar, Users, Shield, Download, Armchair } from "lucide-react";
+import { Bus, User, Phone, MapPin, Calendar, Users, Shield, Download, Armchair, Mail } from "lucide-react";
 import { format } from 'date-fns';
 import type { BookingDetails } from "@/lib/types";
 
@@ -49,6 +49,15 @@ export default function BookingTicket({ bookingDetails }: { bookingDetails: Book
                                 <p className="text-muted-foreground">{bookingDetails.phone}</p>
                             </div>
                         </div>
+                        {bookingDetails.email && (
+                            <div className="flex items-start gap-3">
+                                <Mail className="size-5 mt-1 text-primary" />
+                                <div>
+                                    <p className="font-semibold">Email</p>
+                                    <p className="text-muted-foreground">{bookingDetails.email}</p>
+                                </div>
+                            </div>
+                        )}
                          <div className="flex items-start gap-3">
                             <Shield className="size-5 mt-1 text-primary" />
                             <div>
@@ -132,3 +141,5 @@ export default function BookingTicket({ bookingDetails }: { bookingDetails: Book
         </Card>
     );
 }
+
+    

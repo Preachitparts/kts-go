@@ -57,6 +57,7 @@ Represents a scheduled journey or trip. A single session can be created for mult
 Stores information about registered passengers.
 - `name` (string)
 - `phone` (string)
+- `email` (string, optional)
 - `emergencyContact` (string)
 
 #### `referrals`
@@ -72,6 +73,7 @@ Manages referral partners.
 
 A typical **booking document** (across all booking collections) contains:
 - `name`, `phone`, `emergencyContact` (string)
+- `email` (string, optional)
 - `pickup`, `destination` (string)
 - `date` (Timestamp)
 - `seats` (array of strings)
@@ -146,3 +148,5 @@ For each of the following, create a dedicated page with a table to display the d
 - Store these settings securely in a dedicated `settings` collection in Firestore.
 
 By following this guide, you can successfully replicate the KTS Go admin portal, providing a powerful tool for managing a complete transport service business.
+
+    

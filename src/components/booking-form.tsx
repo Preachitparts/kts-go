@@ -41,6 +41,7 @@ import SeatSelection from "./seat-selection";
 const bookingSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
   phone: z.string().regex(/^(\+233|0)[2-9]\d{8}$/, "Invalid Ghanaian phone number."),
+  email: z.string().email("Invalid email address.").optional().or(z.literal('')),
   date: z.date({ required_error: "Departure date is required." }),
   regionId: z.string().min(1, "Please select a region."),
   routeId: z.string().min(1, "Please select a route."),
@@ -105,6 +106,7 @@ export function BookingForm() {
     defaultValues: {
       name: "",
       phone: "",
+      email: "",
       selectedSeats: [],
       emergencyContact: "",
       regionId: "",
@@ -268,6 +270,7 @@ export function BookingForm() {
         const pendingBookingData = {
             name: values.name,
             phone: values.phone,
+            email: values.email || null,
             emergencyContact: values.emergencyContact,
             date: Timestamp.fromDate(values.date),
             seats: values.selectedSeats,
@@ -310,8 +313,6 @@ export function BookingForm() {
 
     } catch (error: any) {
       console.error("Error during booking process:", error);
-      // NOTE: We no longer move the booking to rejected here.
-      // The `releaseExpiredSeats` function will handle timed-out pending bookings.
       toast({
         variant: "destructive",
         title: "Booking Error",
@@ -500,19 +501,34 @@ export function BookingForm() {
                 )}
             />
         )}
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Full Name</FormLabel>
-              <FormControl>
-                <Input placeholder="e.g. John Doe" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+                <FormItem>
+                <FormLabel>Full Name</FormLabel>
+                <FormControl>
+                    <Input placeholder="e.g. John Doe" {...field} />
+                </FormControl>
+                <FormMessage />
+                </FormItem>
+            )}
+            />
+            <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+                <FormItem>
+                <FormLabel>Email (Optional)</FormLabel>
+                <FormControl>
+                    <Input placeholder="e.g. john.doe@example.com" {...field} />
+                </FormControl>
+                <FormMessage />
+                </FormItem>
+            )}
+            />
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
             control={form.control}
@@ -588,3 +604,5 @@ export function BookingForm() {
     </Form>
   );
 }
+
+    

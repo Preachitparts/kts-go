@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
             batch.set(passengerRef, {
                 name: bookingDetails.name,
                 phone: bookingDetails.phone,
+                email: bookingDetails.email || null,
                 emergencyContact: bookingDetails.emergencyContact,
             }, { merge: true });
 
@@ -112,3 +113,5 @@ export async function GET(req: NextRequest) {
     console.log(`Redirecting user to confirmation page: ${confirmationUrl.toString()}`);
     return NextResponse.redirect(confirmationUrl);
 }
+
+    

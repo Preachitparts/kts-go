@@ -23,6 +23,7 @@ async function getBookingDetails(ref: string): Promise<BookingDetails | null> {
         return {
             name: bookingDoc.name || 'N/A',
             phone: bookingDoc.phone || 'N/A',
+            email: bookingDoc.email || null,
             pickup: bookingDoc.pickup || 'N/A',
             destination: bookingDoc.destination || 'N/A',
             date: date,
@@ -89,3 +90,5 @@ export default async function BookingConfirmationPage({ searchParams }: { search
         </Suspense>
     );
 }
+
+    

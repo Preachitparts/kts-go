@@ -2,6 +2,7 @@
 export type BookingDetails = {
   name: string;
   phone: string;
+  email?: string | null;
   pickup: string;
   destination: string;
   date: Date;
@@ -12,3 +13,5 @@ export type BookingDetails = {
   ticketNumber: string;
   clientReference: string;
 };
+
+    
