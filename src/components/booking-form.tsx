@@ -318,6 +318,7 @@ export function BookingForm() {
         title: "Booking Error",
         description: error.message || "Could not generate payment link. Please try again.",
       });
+      // Do not move to rejected here, let the timed job handle it.
     } finally {
       setIsSubmitting(false);
     }
@@ -605,4 +606,3 @@ export function BookingForm() {
   );
 }
 
-    
