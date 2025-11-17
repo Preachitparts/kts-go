@@ -44,7 +44,9 @@ type User = {
 
 
 export default function UsersTable() {
-    const [users, setUsers] = useState<User[]>([]);
+    const [users, setUsers] = useState<User[]>([
+        { id: 'initial-admin', name: 'Default Admin', email: 'admin@example.com', role: 'Super-Admin' }
+    ]);
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -67,7 +69,12 @@ export default function UsersTable() {
             const usersCollection = collection(db, "users");
             const usersSnapshot = await getDocs(usersCollection);
             const usersList = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-            setUsers(usersList);
+            // Combine initial user with fetched users, preventing duplicates
+            setUsers(prev => {
+                const combined = [...prev, ...usersList];
+                const uniqueUsers = Array.from(new Map(combined.map(u => [u.email, u])).values());
+                return uniqueUsers;
+            });
         } catch (error) {
             console.error("Error fetching users:", error);
             toast({ variant: "destructive", title: "Error", description: "Could not fetch users." });
@@ -224,7 +231,7 @@ export default function UsersTable() {
                         </Button>
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
-                                <Button variant="destructive" size="icon">
+                                <Button variant="destructive" size="icon" disabled={user.id === 'initial-admin'}>
                                     <Trash2 className="h-4 w-4" />
                                 </Button>
                             </AlertDialogTrigger>
